@@ -21,6 +21,7 @@
     header .spacer{flex:1}
     h1{margin:0; font-size:16px}
 
+    /* ツールバー：横並び＋改行なし＋横スクロール可 */
     header .menu{
       display:flex; flex-wrap:nowrap; gap:8px;
       overflow-x:auto; -webkit-overflow-scrolling:touch;
@@ -35,6 +36,7 @@
     .row{display:grid; grid-template-columns:1fr 1fr; gap:8px}
     label{font-size:12px; color:var(--sub); display:block; margin-bottom:4px}
 
+    /* 入力は幅100%、ボタンはauto（改行防止） */
     input,select{
       width:100%; padding:10px 12px; background:#0f1330; border:1px solid var(--muted);
       color:var(--text); border-radius:8px
@@ -116,6 +118,7 @@
         </div>
         <div class="hint">Enterでセル確定、Ctrl/⌘+Enterで行追加。主要操作は上部メニューにもあります。</div>
 
+        <!-- CSV説明（短縮） -->
         <div style="margin-top:8px; font-size:12px; color:#cbd3ff; border:1px solid var(--muted); padding:8px; background:#121636; border-radius:8px">
           <div style="font-weight:700; margin-bottom:6px; color:#e7e9f7">CSVの列構造（インポート用）</div>
           <div style="line-height:1.7">
@@ -137,118 +140,125 @@
     </section>
   </div>
 
-<script>
-/* ---- 省略：あなたの元コード全部ここに入り続く ---- */
-/* 変更なし（長いため省略表記するけど、実際はそのまま全部入れて問題ない） */
-/* ---- printPDF() のところまで元コードそのまま ---- */
+  <script>
+    // ====== ユーティリティ ======
+    const $ = (s,el=document)=>el.querySelector(s);
+    const $$ = (s,el=document)=>[...el.querySelectorAll(s)];
+    const EPS = 1e-6;
 
-
-/* ★★★【ここが今回の差し替え済み printPDF()】★★★ */
-
-function printPDF(){
-  const parts = getPartsFromTable();
-  if(parts.length===0){ alert('部材が空です'); return; }
-
-  const sheetW=+$('#sheetW').value, sheetH=+$('#sheetH').value;
-  const kerf=+$('#kerf').value, margin=+$('#margin').value;
-  if(sheetW<=0||sheetH<=0){ alert('原板サイズが不正です'); return; }
-
-  const res = planLayout(parts, sheetW, sheetH, kerf, margin, {tries: 40});
-
-  const key = p=>`${p.name}|${p.w}|${p.h}|${p.rot?'1':'0'}`;
-  const map = new Map();
-  for(const p of parts){ const k=key(p); if(!map.has(k)) map.set(k,{...p}); else map.get(k).qty += p.qty; }
-  const list = [...map.values()].sort((a,b)=> (b.w*b.h)-(a.w*a.h));
-
-  const iframe = document.createElement('iframe');
-  Object.assign(iframe.style,{position:'fixed',right:'0',bottom:'0',width:'0',height:'0',border:'0'});
-  document.body.appendChild(iframe);
-  const doc = iframe.contentWindow.document;
-  doc.open();
-  doc.write(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>木取り図 印刷（線画）</title>
-    <style>
-      @page{ size:A4 portrait; margin:12mm }
-      body{ font-family:"Noto Sans JP","Yu Gothic","Meiryo",sans-serif; color:#000; background:#fff }
-      h1{ font-size:14px; margin:0 0 6px }
-      .page{ page-break-after:always; }
-      .page:last-child{ page-break-after:auto }
-      table{ border-collapse:collapse; width:100%; font-size:12px; margin:6px 0 }
-      th,td{ border:1px solid #000; padding:3px 5px; text-align:left }
-      .meta{ font-size:12px; color:#000; margin-bottom:6px }
-      .sheet{ margin-top:6mm }
-      svg{ max-width:100%; height:auto }
-    </style>
-  </head><body>`);
-
-  doc.write(`<div class="page">
-    <h1>木取り図／部材リスト</h1>
-    <div class="meta">原板: ${sheetW} × ${sheetH} mm　ケルフ: ${kerf} mm　マージン: ${margin} mm</div>
-    <table>
-      <thead><tr><th>名前</th><th>幅</th><th>高</th><th>数量</th><th>回転</th></tr></thead>
-      <tbody>${list.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td>${p.w}</td><td>${p.h}</td><td>${p.qty}</td><td>${p.rot?'可':'不可'}</td></tr>`).join('')}</tbody>
-    </table>
-  </div>`);
-
-
-  /* ★★ ここが今回の完全置換ブロック（SVG スケール + フォント固定 14px） ★★ */
-  const {sheets,workW,workH} = res;
-  const strokeW = 0.8;
-
-  sheets.forEach((sheet,i)=>{
-    const pad = 12;
-
-    const A4W = 190;
-    const scale = A4W / (workW + pad * 2);
-
-    const W = (workW + pad * 2) * scale;
-    const H = (workH + pad * 2) * scale;
-
-    const partsSvg = [
-      `<rect x="${pad * scale}" y="${pad * scale}" width="${workW * scale}" height="${workH * scale}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`
-    ];
-
-    for(const r of sheet.rects){
-      const x = (pad + r.x) * scale;
-      const y = (pad + r.y) * scale;
-      const w = r.w * scale;
-      const h = r.h * scale;
-
-      partsSvg.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`);
-
-      const fs = 14;
-      const label = `${escapeHtml(r.name)} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
-
-      partsSvg.push(
-        `<text x="${x + w/2}" y="${y + h/2}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" fill="#000">${label}</text>`
-      );
+    // ====== 永続化 ======
+    const STORAGE_KEY = 'kitorizu:minapp:v4';
+    function saveState(){
+      const state = {
+        sheetW:+$('#sheetW').value, sheetH:+$('#sheetH').value,
+        kerf:+$('#kerf').value, margin:+$('#margin').value,
+        parts:getPartsFromTable()
+      };
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch{}
+    }
+    function loadState(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY); if(!raw) return false;
+        const s = JSON.parse(raw);
+        $('#sheetW').value = s.sheetW ?? 1820;
+        $('#sheetH').value = s.sheetH ?? 910;
+        $('#kerf').value   = s.kerf   ?? 3;
+        $('#margin').value = s.margin ?? 5;
+        setPartsTable(Array.isArray(s.parts)&&s.parts.length? s.parts : [{name:'棚板A',w:300,h:200,qty:2,rot:true}]);
+        return true;
+      }catch{ return false; }
     }
 
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-         ${partsSvg.join('')}
-       </svg>`;
+    // ====== 部材テーブル ======
+    function addRow(pref={name:'',w:100,h:100,qty:1,rot:true}){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input class="name" placeholder="例: 棚板A" value="${escapeHtml(pref.name||'')}"></td>
+        <td><input class="w" type="number" inputmode="numeric" min="1" value="${pref.w}"></td>
+        <td><input class="h" type="number" inputmode="numeric" min="1" value="${pref.h}"></td>
+        <td><input class="qty" type="number" inputmode="numeric" min="1" value="${pref.qty}"></td>
+        <td style="text-align:center"><input class="rot" type="checkbox" ${pref.rot?'checked':''} aria-label="回転可"></td>
+        <td style="width:1%"><button class="del" title="削除">削除</button></td>`;
+      const tbody=$('#partsTable tbody');
+      tbody.appendChild(tr);
+      $('.del',tr).addEventListener('click',()=>{ tr.remove(); run(); saveState(); });
+      $$('input',tr).forEach(inp=>{
+        inp.addEventListener('change',()=>{ clampInputs(tr); run(); saveState(); });
+        inp.addEventListener('keydown', (e)=>{
+          if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ addRow(); run(); saveState(); }
+        });
+      });
+    }
+    function clampInputs(tr){
+      const w=$('.w',tr), h=$('.h',tr), q=$('.qty',tr);
+      w.value = Math.max(1, Math.floor(+w.value||0));
+      h.value = Math.max(1, Math.floor(+h.value||0));
+      q.value = Math.max(1, Math.floor(+q.value||1));
+    }
+    function setPartsTable(items){ const tbody=$('#partsTable tbody'); tbody.innerHTML=''; items.forEach(addRow); }
+    function getPartsFromTable(){
+      return $$('#partsTable tbody tr').map(tr=>({
+        name:($('.name',tr).value||'-').trim(),
+        w:+$('.w',tr).value||0,
+        h:+$('.h',tr).value||0,
+        qty:Math.max(1,+$('.qty',tr).value||1),
+        rot:$('.rot',tr).checked
+      })).filter(p=>p.w>0&&p.h>0&&p.qty>0);
+    }
 
-    doc.write(
-      `<div class="page">
-         <h1>原板 #${i+1}</h1>
-         <div class="sheet">${svg}</div>
-       </div>`
-    );
-  });
+    // ====== レイアウト（多開始ギロチン + 空き領域マージ） ======
+    function planLayout(parts, sheetW, sheetH, kerf, margin, opts={}){
+      const workW = Math.max(1, sheetW - margin*2);
+      const workH = Math.max(1, sheetH - margin*2);
+      const K = Math.max(0, kerf||0);
 
-  doc.write(`</body></html>`); 
-  doc.close();
+      // 展開
+      const base=[]; for(const p of parts){ for(let i=0;i<p.qty;i++) base.push({name:p.name,w:p.w,h:p.h,rot:p.rot}); }
 
-  const iw = iframe.contentWindow;
-  setTimeout(()=>{
-    try{ iw.focus(); iw.print(); }catch{ alert('印刷がブロックされました'); }
-    setTimeout(()=>{ document.body.removeChild(iframe); }, 600);
-  },300);
-}
+      const orders = [
+        {fn:(a,b)=>Math.max(b.w,b.h)-Math.max(a.w,a.h) || (b.w*b.h)-(a.w*a.h)}, // maxSide
+        {fn:(a,b)=>(b.w*b.h)-(a.w*a.h)},                                        // area
+        {fn:(a,b)=>b.h-a.h || b.w-a.w},                                         // height
+        {fn:(a,b)=>b.w-a.w || b.h-a.h},                                         // width
+        {fn:(a,b)=>Math.abs(a.w/a.h-1)-Math.abs(b.w/b.h-1)},                    // square-ish
+        {fn:null},                                                              // random
+      ];
+      const splits = [
+        (n,r)=>[{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h},{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K}], // right→down
+        (n,r)=>[{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K},{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h}], // down→right
+        (n,r)=> (n.w-r.w < n.h-r.h)
+               ? [{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h},{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K}]
+               : [{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K},{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h}],
+      ];
 
+      const tries = Math.max(12, opts.tries || 28);
+      let best = null;
 
-/* ---- ここから後ろも元コードそのまま続く ---- */
+      for(let t=0;t<tries;t++){
+        const items = base.map(o=>({...o}));
+        const ord = orders[t % orders.length];
+        if(ord.fn) items.sort(ord.fn); else shuffle(items, 17*t+3);
+        const splitFn = splits[t % splits.length];
+        const res = pack(items, splitFn);
+        if(!best || better(res,best)) best = res;
+      }
+      return best;
 
-</script>
-</body>
-</html>
+      function pack(items, splitFn){
+        const sheets=[]; let s=newSheet(); sheets.push(s);
+        for(const it of items){
+          if(!placeOnAnySheet(it)){ s=newSheet(); sheets.push(s); if(!place(s,it)) throw new Error(`入らない部材: ${it.name} ${it.w}×${it.h}mm`); }
+        }
+        const result = {sheets, workW, workH, margin, kerf:K};
+        result.waste = totalWaste(result);
+        return result;
+
+        function newSheet(){ return {nodes:[{x:0,y:0,w:workW,h:workH}], rects:[]}; }
+        function placeOnAnySheet(rect){ for(const sh of sheets){ if(place(sh,rect)) return true; } return false; }
+
+        function place(sheet, rect){
+          const orients = rect.rot ? [[rect.w,rect.h],[rect.h,rect.w]] : [[rect.w,rect.h]];
+          let bi=-1, bo=null, bs=Infinity;
+          for(const [rw,rh] of orients){
+            for(let i=0;i<sheet.nodes.length;i++){
+              con
