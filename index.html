@@ -454,7 +454,7 @@
         for(const r of sheet.rects){
           const x=pad+r.x, y=pad+r.y;
           partsSvg.push(`<rect x="${x}" y="${y}" width="${r.w}" height="${r.h}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`);
-          const fs = Math.max(9, Math.min(12, Math.min(r.w, r.h)/5));
+          const fs = 14;  // ★固定フォントサイズ
           const label = `${escapeHtml(r.name)} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
           partsSvg.push(`<text x="${x+r.w/2}" y="${y+r.h/2}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" fill="#000">${label}</text>`);
         }
@@ -587,3 +587,4 @@
   </script>
 </body>
 </html>
+
