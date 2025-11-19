@@ -261,4 +261,329 @@
           let bi=-1, bo=null, bs=Infinity;
           for(const [rw,rh] of orients){
             for(let i=0;i<sheet.nodes.length;i++){
-              con
+              const n=sheet.nodes[i];
+              if(rw<=n.w && rh<=n.h){
+                const leftover=(n.w-rw)*(n.h-rh);
+                const edge=Math.abs(n.w-rw)+Math.abs(n.h-rh);
+                const sc = leftover + edge*0.02;
+                if(sc<bs){ bs=sc; bi=i; bo=[rw,rh]; }
+              }
+            }
+          }
+          if(bi<0) return false;
+
+          const [rw,rh]=bo; const n=sheet.nodes[bi]; const x=n.x, y=n.y;
+          sheet.rects.push({x,y,w:rw,h:rh,name:rect.name,rot:(rw!==rect.w)});
+          const frags = splitFn(n,{w:rw,h:rh});
+          sheet.nodes.splice(bi,1);
+          for(const f of frags){ const g={x:f.x,y:f.y,w:Math.max(0,f.w),h:Math.max(0,f.h)}; if(g.w>EPS && g.h>EPS) sheet.nodes.push(g); }
+          normalize(sheet);
+          return true;
+        }
+
+        function normalize(sheet){
+          sheet.nodes = sheet.nodes.filter(a=>a.w>EPS && a.h>EPS);
+          sheet.nodes = sheet.nodes.filter((a,i,arr)=>!arr.some((b,j)=>i!==j && b.x<=a.x && b.y<=a.y && (b.x+b.w)>=(a.x+a.w) && (b.y+b.h)>=(a.y+a.h)));
+          merge(sheet,'h'); merge(sheet,'v');
+        }
+        function almost(a,b){ return Math.abs(a-b) < EPS; }
+        function merge(sheet, axis){
+          let changed=true;
+          while(changed){
+            changed=false;
+            outer: for(let i=0;i<sheet.nodes.length;i++){
+              for(let j=i+1;j<sheet.nodes.length;j++){
+                const a=sheet.nodes[i], b=sheet.nodes[j];
+                if(axis==='h'){
+                  if(almost(a.y,b.y) && almost(a.h,b.h) &&
+                     (almost(a.x+a.w+K,b.x) || almost(b.x+b.w+K,a.x))){
+                    sheet.nodes.splice(j,1); sheet.nodes.splice(i,1);
+                    sheet.nodes.push({x:Math.min(a.x,b.x), y:a.y, w:a.w+b.w+K, h:a.h});
+                    changed=true; break outer;
+                  }
+                }else{
+                  if(almost(a.x,b.x) && almost(a.w,b.w) &&
+                     (almost(a.y+a.h+K,b.y) || almost(b.y+b.h+K,a.y))){
+                    sheet.nodes.splice(j,1); sheet.nodes.splice(i,1);
+                    sheet.nodes.push({x:a.x, y:Math.min(a.y,b.y), w:a.w, h:a.h+b.h+K});
+                    changed=true; break outer;
+                  }
+                }
+              }
+            }
+          }
+        }
+        function totalWaste(result){
+          const sheetArea = result.sheets.length * workW * workH;
+          const rectArea  = result.sheets.reduce((acc,s)=> acc + s.rects.reduce((a,r)=>a+r.w*r.h,0), 0);
+          return sheetArea - rectArea;
+        }
+      }
+      function better(a,b){
+        if(a.sheets.length !== b.sheets.length) return a.sheets.length < b.sheets.length;
+        if(a.waste !== b.waste) return a.waste < b.waste;
+        const na=a.sheets.reduce((s,sh)=>s+sh.nodes.length,0);
+        const nb=b.sheets.reduce((s,sh)=>s+sh.nodes.length,0);
+        return na<nb;
+      }
+      function shuffle(arr, seed=1){
+        let x = seed>>>0 || 1;
+        for(let i=arr.length-1;i>0;i--){
+          x = (1664525*x + 1013904223) >>> 0;
+          const j = x % (i+1);
+          [arr[i],arr[j]] = [arr[j],arr[i]];
+        }
+      }
+    }
+
+    // ====== 統計表示 ======
+    function calcStats(result, parts){
+      const {sheets,workW,workH} = result;
+      const totalSheetArea = sheets.length * (workW*workH);
+      const partsArea = parts.reduce((a,p)=> a + p.w*p.h*p.qty, 0);
+      const waste = Math.max(0, totalSheetArea - partsArea);
+      const util = totalSheetArea>0 ? (partsArea/totalSheetArea*100) : 0;
+      return {sheetsCount:sheets.length, partsArea, waste, util};
+    }
+    function renderStats(stats){
+      const nf1 = new Intl.NumberFormat('ja-JP',{maximumFractionDigits:1});
+      const nf0 = new Intl.NumberFormat('ja-JP');
+      $('#stats').innerHTML = `
+        <span class="chip">原板: ${stats.sheetsCount} 枚</span>
+        <span class="chip">部材面積: ${nf0.format(stats.partsArea)} mm²</span>
+        <span class="chip">廃材面積: ${nf0.format(stats.waste)} mm²</span>
+        <span class="chip">利用率: ${nf1.format(stats.util)}%</span>
+      `;
+    }
+
+    // ====== 画面プレビュー（カラー） ======
+    function renderSheets(result){
+      const {sheets,workW,workH,margin}=result;
+      const wrap=$('#sheets'); wrap.innerHTML='';
+      const scale = Math.min(820/(workW+margin*2), 3);
+      sheets.forEach((sheet,idx)=>{
+        const W=(workW+margin*2)*scale, H=(workH+margin*2)*scale;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+        svg.setAttribute('width',W); svg.setAttribute('height',H);
+        svg.style.background="#0b102e"; svg.style.border="1px solid #2a2f4a"; svg.style.borderRadius='8px';
+        rect(svg, margin*scale, margin*scale, workW*scale, workH*scale, '#101533', '#8ea0ff', 2);
+        for(const r of sheet.rects){
+          const x=(margin+r.x)*scale, y=(margin+r.y)*scale, w=r.w*scale, h=r.h*scale;
+          rect(svg,x,y,w,h,'#2f6df6','#1d4ed8',1);
+          const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+          t.setAttribute('x', x+w/2); t.setAttribute('y', y+h/2);
+          t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+          t.setAttribute('fill','#e6f0ff');
+          t.setAttribute('font-size', Math.max(10,Math.min(16,Math.min(w,h)/6)));
+          t.textContent = `${r.name} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
+          svg.appendChild(t);
+        }
+        const title = document.createElementNS('http://www.w3.org/2000/svg','text');
+        title.setAttribute('x', 8); title.setAttribute('y', 16);
+        title.setAttribute('fill','#cbd3ff'); title.setAttribute('font-size','12');
+        title.textContent = `原板 #${idx+1}`;
+        svg.appendChild(title);
+        wrap.appendChild(svg);
+      });
+      function rect(svg,x,y,w,h,fill,stroke,sw){
+        const el=document.createElementNS('http://www.w3.org/2000/svg','rect');
+        el.setAttribute('x',x); el.setAttribute('y',y);
+        el.setAttribute('width',w); el.setAttribute('height',h);
+        el.setAttribute('rx','4'); el.setAttribute('fill',fill);
+        el.setAttribute('stroke',stroke); el.setAttribute('stroke-width',sw);
+        svg.appendChild(el);
+      }
+    }
+
+    // ====== 印刷（PDF＝線だけ） ======
+    function printPDF(){
+      const parts = getPartsFromTable();
+      if(parts.length===0){ alert('部材が空です'); return; }
+
+      const sheetW=+$('#sheetW').value, sheetH=+$('#sheetH').value;
+      const kerf=+$('#kerf').value, margin=+$('#margin').value;
+      if(sheetW<=0||sheetH<=0){ alert('原板サイズが不正です'); return; }
+
+      const res = planLayout(parts, sheetW, sheetH, kerf, margin, {tries: 40}); // PDF時は少し頑張る
+
+      // 集約表
+      const key = p=>`${p.name}|${p.w}|${p.h}|${p.rot?'1':'0'}`;
+      const map = new Map();
+      for(const p of parts){ const k=key(p); if(!map.has(k)) map.set(k,{...p}); else map.get(k).qty += p.qty; }
+      const list = [...map.values()].sort((a,b)=> (b.w*b.h)-(a.w*a.h));
+
+      const iframe = document.createElement('iframe');
+      Object.assign(iframe.style,{position:'fixed',right:'0',bottom:'0',width:'0',height:'0',border:'0'});
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>木取り図 印刷（線画）</title>
+        <style>
+          @page{ size:A4 portrait; margin:12mm }
+          body{ font-family:"Noto Sans JP","Yu Gothic","Meiryo",sans-serif; color:#000; background:#fff }
+          h1{ font-size:14px; margin:0 0 6px }
+          .page{ page-break-after:always; }
+          .page:last-child{ page-break-after:auto }
+          table{ border-collapse:collapse; width:100%; font-size:12px; margin:6px 0 }
+          th,td{ border:1px solid #000; padding:3px 5px; text-align:left }
+          .meta{ font-size:12px; color:#000; margin-bottom:6px }
+          .sheet{ margin-top:6mm }
+          svg{ max-width:100%; height:auto }
+        </style>
+      </head><body>`);
+
+      // 1ページ目：部材表
+      doc.write(`<div class="page">
+        <h1>木取り図／部材リスト</h1>
+        <div class="meta">原板: ${sheetW} × ${sheetH} mm　ケルフ: ${kerf} mm　マージン: ${margin} mm</div>
+        <table>
+          <thead><tr><th>名前</th><th>幅</th><th>高</th><th>数量</th><th>回転</th></tr></thead>
+          <tbody>${list.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td>${p.w}</td><td>${p.h}</td><td>${p.qty}</td><td>${p.rot?'可':'不可'}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>`);
+
+      // 2ページ目以降：線のみのシート
+      const {sheets,workW,workH} = res;
+      const strokeW = 0.8;
+      sheets.forEach((sheet,i)=>{
+        const pad = 12, W = workW + pad*2, H = workH + pad*2;
+        const partsSvg = [
+          `<rect x="${pad}" y="${pad}" width="${workW}" height="${workH}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`
+        ];
+        for(const r of sheet.rects){
+          const x=pad+r.x, y=pad+r.y;
+          partsSvg.push(`<rect x="${x}" y="${y}" width="${r.w}" height="${r.h}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`);
+          const fs = 40;  // ★ここだけ変更：部材ラベルのフォントサイズを固定（必要なら値を調整）
+          const label = `${escapeHtml(r.name)} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
+          partsSvg.push(`<text x="${x+r.w/2}" y="${y+r.h/2}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" fill="#000">${label}</text>`);
+        }
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${partsSvg.join('')}</svg>`;
+        doc.write(`<div class="page"><h1>原板 #${i+1}</h1><div class="sheet">${svg}</div></div>`);
+      });
+
+      doc.write(`</body></html>`); doc.close();
+      const iw = iframe.contentWindow;
+      setTimeout(()=>{ try{ iw.focus(); iw.print(); }catch{ alert('印刷がブロックされました。ポップアップ許可を確認してください。'); }
+        setTimeout(()=>{ document.body.removeChild(iframe); }, 600);
+      }, 300);
+    }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;"}[c])); }
+
+    // ====== CSVパーサ（安全・簡潔） ======
+    function parseCSV(text){
+      const raw = String(text).replace(/^\uFEFF/,'').replace(/\r\n|\r|\n/g,'\n');
+      const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l && !l.startsWith('#'));
+      const out=[]; if(lines.length===0) return out;
+      const delim = detectDelimiter(lines.slice(0,Math.min(lines.length,3)));
+      for(let i=0;i<lines.length;i++){
+        const cols = splitCSVLine(lines[i], delim); if(cols.length===0) continue;
+        const [cName,cW,cH,cQty='1',cRot='1'] = cols;
+        const w   = normalizeNumber(cW);
+        const h   = normalizeNumber(cH);
+        const qty = normalizeInt(cQty,1);
+        const rot = normalizeBool(cRot,true);
+        if((!Number.isFinite(w)||!Number.isFinite(h)) && i===0) continue; // ヘッダスキップ
+        if(Number.isFinite(w)&&Number.isFinite(h)&&w>0&&h>0&&qty>0){
+          out.push({name:String(cName??'-').trim()||'-', w, h, qty:Math.max(1,qty), rot});
+        }
+      }
+      return out;
+    }
+    function detectDelimiter(sampleLines){
+      const cands=[',',';','\t','、','，']; let best=',',score=-1;
+      for(const c of cands){ const s=sampleLines.reduce((a,l)=>a+((l.split(c).length-1)||0),0); if(s>score){best=c;score=s;} }
+      return best;
+    }
+    function splitCSVLine(line, delim){
+      const out=[]; let cur=''; let inQ=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(inQ){
+          if(ch==='"'){ if(i+1<line.length && line[i+1]==='"'){cur+='"';i++;} else {inQ=false;} }
+          else cur+=ch;
+        }else{
+          if(ch==='"') inQ=true;
+          else if(ch===delim){ out.push(cur); cur=''; }
+          else cur+=ch;
+        }
+      }
+      out.push(cur);
+      return out.map(s=>s.trim());
+    }
+    function normalizeNumber(s){
+      if(s==null) return NaN;
+      let t=String(s).trim();
+      t=t.replace(/[０-９．]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+      t=t.replace(/(mm|㎜)/gi,'').replace(/\s+/g,'').replace(/,/g,'');
+      const v=Number(t); return Number.isFinite(v)?v:NaN;
+    }
+    function normalizeInt(s,def=0){
+      if(s==null) return def;
+      const n=parseInt(String(s).replace(/,/g,'').trim(),10);
+      return Number.isFinite(n)?n:def;
+    }
+    function normalizeBool(s,def=true){
+      const t=String(s??'').trim().toLowerCase();
+      if(['1','true','t','yes','y','可','はい'].includes(t)) return true;
+      if(['0','false','f','no','n','不可','いいえ'].includes(t)) return false;
+      return def;
+    }
+
+    // ====== 実行 ======
+    function run(opts={}){
+      try{
+        const parts=getPartsFromTable();
+        const sheetW=+$('#sheetW').value, sheetH=+$('#sheetH').value;
+        const kerf=+$('#kerf').value, margin=+$('#margin').value;
+        if(sheetW<=0||sheetH<=0) throw new Error('原板サイズが不正です');
+        const res=planLayout(parts, sheetW, sheetH, kerf, margin, opts);
+        renderSheets(res);
+        renderStats(calcStats(res, parts));
+      }catch(e){ alert(e.message||String(e)); }
+    }
+
+    // ====== イベント ======
+    $('#topAddRow').addEventListener('click',()=>{ addRow(); run(); saveState(); });
+    $('#topClear').addEventListener('click',()=>{ setPartsTable([]); run(); saveState(); });
+    $('#topRun').addEventListener('click',()=>{ run({tries:28}); saveState(); });
+    $('#topOpt').addEventListener('click', async ()=>{
+      const btn = $('#topOpt'); const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '探索中…';
+      try{ run({tries:80}); saveState(); } finally { btn.disabled=false; btn.textContent=old; }
+    });
+    $('#topImport').addEventListener('click',()=>$('#csvFile').click());
+    $('#csvFile').addEventListener('change', async (ev)=>{
+      const file = ev.target.files && ev.target.files[0]; if(!file) return;
+      try{
+        const buf = await file.arrayBuffer();
+        let text='';
+        try{
+          text = new TextDecoder('utf-8',{fatal:false}).decode(buf);
+          const bad=(text.match(/�/g)||[]).length;
+          if(bad>5){ text = new TextDecoder('shift_jis',{fatal:false}).decode(buf); }
+        }catch{
+          text = new TextDecoder('shift_jis',{fatal:false}).decode(buf);
+        }
+        const parts = parseCSV(text);
+        if(parts.length===0){
+          alert('CSVに有効なデータが見つかりませんでした\n\nチェック:\n・区切りは カンマ/セミコロン/タブ/読点 か\n・幅/高さは数値（mm を付けない）か\n・1行目がヘッダでもOK（自動スキップ）');
+          return;
+        }
+        setPartsTable(parts); run(); saveState();
+      }catch(err){ console.error(err); alert('CSVの解析に失敗しました'); }
+      ev.target.value='';
+    });
+    $('#topPDF').addEventListener('click', printPDF);
+
+    ['#sheetW','#sheetH','#kerf','#margin'].forEach(sel=>{
+      $(sel).addEventListener('change', ()=>{ run(); saveState(); });
+    });
+
+    // 初期表示
+    if(!loadState()){ setPartsTable([{name:'棚板A',w:300,h:200,qty:2,rot:true}]); }
+    run({tries:28});
+  </script>
+</body>
+</html>
