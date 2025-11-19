@@ -443,33 +443,55 @@
         </table>
       </div>`);
 
-      // 2ページ目以降：線のみのシート
-      const {sheets,workW,workH} = res;
-      const strokeW = 0.8;
-      sheets.forEach((sheet,i)=>{
-        const pad = 12, W = workW + pad*2, H = workH + pad*2;
-        const partsSvg = [
-          `<rect x="${pad}" y="${pad}" width="${workW}" height="${workH}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`
-        ];
-        for(const r of sheet.rects){
-          const x=pad+r.x, y=pad+r.y;
-          partsSvg.push(`<rect x="${x}" y="${y}" width="${r.w}" height="${r.h}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`);
-          const fs = 14;  // ★固定フォントサイズ
-          const label = `${escapeHtml(r.name)} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
-          partsSvg.push(`<text x="${x+r.w/2}" y="${y+r.h/2}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" fill="#000">${label}</text>`);
-        }
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${partsSvg.join('')}</svg>`;
-        doc.write(`<div class="page"><h1>原板 #${i+1}</h1><div class="sheet">${svg}</div></div>`);
-      });
+// 2ページ目以降：線のみのシート
+const {sheets,workW,workH} = res;
+const strokeW = 0.8;
 
-      doc.write(`</body></html>`); doc.close();
-      const iw = iframe.contentWindow;
-      setTimeout(()=>{ try{ iw.focus(); iw.print(); }catch{ alert('印刷がブロックされました。ポップアップ許可を確認してください。'); }
-        setTimeout(()=>{ document.body.removeChild(iframe); }, 600);
-      }, 300);
-    }
+sheets.forEach((sheet,i)=>{
+  const pad = 12;
 
-    function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;"}[c])); }
+  // ★A4 幅に合わせて縮小スケールを作る（印刷面 12mm × 2 の余白を引いた幅）
+  const A4W = 190;  // mm
+  const scale = A4W / (workW + pad * 2);
+
+  // 実際の SVG サイズ（A4 内に収まる）
+  const W = (workW + pad * 2) * scale;
+  const H = (workH + pad * 2) * scale;
+
+  const partsSvg = [
+    `<rect x="${pad * scale}" y="${pad * scale}" width="${workW * scale}" height="${workH * scale}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`
+  ];
+
+  for(const r of sheet.rects){
+    const x = (pad + r.x) * scale;
+    const y = (pad + r.y) * scale;
+    const w = r.w * scale;
+    const h = r.h * scale;
+
+    partsSvg.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`);
+
+    // ★フォントサイズ固定（14px）
+    const fs = 14;
+    const label = `${escapeHtml(r.name)} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
+
+    partsSvg.push(
+      `<text x="${x + w/2}" y="${y + h/2}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" fill="#000">${label}</text>`
+    );
+  }
+
+  // SVG 本体
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+       ${partsSvg.join('')}
+     </svg>`;
+
+  doc.write(
+    `<div class="page">
+       <h1>原板 #${i+1}</h1>
+       <div class="sheet">${svg}</div>
+     </div>`
+  );
+});
 
     // ====== CSVパーサ（安全・簡潔） ======
     function parseCSV(text){
@@ -587,4 +609,5 @@
   </script>
 </body>
 </html>
+
 
