@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>木取り図メーカー（修正版）</title>
+<title>木取り図メーカー（CSV + 最適化版）</title>
 <style>
 :root{--bg:#0f1220;--panel:#161a2e;--muted:#2a2f4a;--text:#e7e9f7;--sub:#a9afd4;--accent:#5b7cff;--accent-2:#2f6df6}
 body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans JP","Meiryo",system-ui}
@@ -32,13 +32,16 @@ td input[type="checkbox"]{transform: translateY(2px)}
 </head>
 <body>
 <header>
-<h1>木取り図メーカー（修正版）</h1>
+<h1>木取り図メーカー</h1>
 <div class="spacer"></div>
 <div class="menu">
 <button id="topAddRow">行を追加</button>
 <button id="topClear">クリア</button>
 <button id="topRun" class="btn-primary">プレビュー</button>
+<button id="topOpt">最適化</button>
+<button id="topImport">CSV読込</button>
 </div>
+<input id="csvFile" type="file" accept=".csv,text/csv,text/plain" style="display:none">
 </header>
 
 <div class="container">
@@ -106,13 +109,10 @@ function getParts(){
     const h=+$('.h',tr).value;
     const qty=+$('.qty',tr).value;
     const rot=$('.rot',tr).checked;
-    const arr=[];
-    for(let i=0;i<qty;i++) arr.push({name,w,h,rot});
-    return arr;
+    return Array.from({length:qty},()=>({name,w,h,rot}));
   }).filter(p=>p.w>0&&p.h>0);
 }
 
-// パッキング（簡易ヒューリスティック）
 function planLayout(parts,sheetW,sheetH,kerf,margin){
   const sheets=[{parts:[],width:sheetW,height:sheetH}];
   for(const part of parts){
@@ -185,16 +185,30 @@ function calcStats(sheets){
   return {sheetCount:sheets.length, utilization:(usedArea/totalArea*100).toFixed(1)+'%'};
 }
 
-function run(){
+function run(opts={tries:1}){
   const parts=getParts();
   const sheetW=+$('#sheetW').value;
   const sheetH=+$('#sheetH').value;
   const kerf=+$('#kerf').value;
   const margin=+$('#margin').value;
-  const sheets=planLayout(parts,sheetW,sheetH,kerf,margin);
-  renderSheets(sheets);
-  const st=calcStats(sheets);
+  let bestSheets=null;
+  let bestUtil=0;
+  for(let i=0;i<opts.tries;i++){
+    const shuffled=[...parts].sort(()=>Math.random()-0.5);
+    const sheets=planLayout(shuffled,sheetW,sheetH,kerf,margin);
+    const util=parseFloat(calcStats(sheets).utilization);
+    if(util>bestUtil){bestUtil=util;bestSheets=sheets;}
+  }
+  renderSheets(bestSheets);
+  const st=calcStats(bestSheets);
   $('#stats').textContent=`板数: ${st.sheetCount} / 利用率: ${st.utilization}`;
+}
+
+function parseCSV(text){
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l).map(l=>{
+    const [name,w,h,qty,rot]=l.split(',');
+    return {name:name.trim(),w:+w,h:+h,qty:+qty,rot:rot.trim()==='1'};
+  });
 }
 
 // 初期データ
@@ -203,9 +217,24 @@ addRow({name:'棚板A',w:300,h:200,qty:2,rot:true});
 // ボタン
 $('#topAddRow').addEventListener('click',()=>addRow());
 $('#topClear').addEventListener('click',()=>{$('#partsTable tbody').innerHTML=''; run();});
-$('#topRun').addEventListener('click',run);
+$('#topRun').addEventListener('click',()=>run({tries:1}));
+$('#topOpt').addEventListener('click',()=>run({tries:50}));
+$('#topImport').addEventListener('click',()=>$('#csvFile').click());
+$('#csvFile').addEventListener('change',e=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{ 
+    const arr=parseCSV(reader.result);
+    $('#partsTable tbody').innerHTML='';
+    arr.forEach(p=>addRow({name:p.name,w:p.w,h:p.h,qty:p.qty,rot:p.rot}));
+    run({tries:1});
+  };
+  reader.readAsText(file);
+});
 
 run();
+});
 </script>
 </body>
 </html>
