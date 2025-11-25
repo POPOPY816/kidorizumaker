@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>木取り図メーカー</title>
-
   <style>
     :root{
       --bg:#0f1220; --panel:#161a2e; --muted:#2a2f4a; --text:#e7e9f7; --sub:#a9afd4;
@@ -22,6 +21,7 @@
     header .spacer{flex:1}
     h1{margin:0; font-size:16px}
 
+    /* ツールバー：横並び＋改行なし＋横スクロール可 */
     header .menu{
       display:flex; flex-wrap:nowrap; gap:8px;
       overflow-x:auto; -webkit-overflow-scrolling:touch;
@@ -36,6 +36,7 @@
     .row{display:grid; grid-template-columns:1fr 1fr; gap:8px}
     label{font-size:12px; color:var(--sub); display:block; margin-bottom:4px}
 
+    /* 入力は幅100%、ボタンはauto（改行防止） */
     input,select{
       width:100%; padding:10px 12px; background:#0f1330; border:1px solid var(--muted);
       color:var(--text); border-radius:8px
@@ -66,51 +67,48 @@
     }
   </style>
 </head>
-
 <body>
   <header>
     <h1>木取り図メーカー</h1>
-    <div class="spacer"></div>
-    <div class="menu">
-      <button id="topAddRow">行を追加</button>
-      <button id="topClear">クリア</button>
-      <button id="topImport">CSV読込</button>
-      <button id="topRun" class="btn-primary">プレビュー</button>
-      <button id="topOpt">最適化</button>
-      <button id="topPDF">PDF印刷</button>
+    <div class="spacer" aria-hidden="true"></div>
+    <div class="menu" role="toolbar" aria-label="操作メニュー">
+      <button id="topAddRow" class="btn" title="部材の行を1つ追加">行を追加</button>
+      <button id="topClear" class="btn" title="部材リストを空にする">クリア</button>
+      <button id="topImport" class="btn" title="CSVから部材を読み込み">CSV読込</button>
+      <button id="topRun" class="btn-primary" title="通常トライでプレビュー">プレビュー</button>
+      <button id="topOpt" class="btn" title="探索回数を増やして最良解を探す">最適化</button>
+      <button id="topPDF" class="btn" title="PDFで印刷（線のみ・省インク）">PDF印刷</button>
     </div>
-    <input id="csvFile" type="file" accept=".csv,text/csv,text/plain" class="sr-only" />
+    <input id="csvFile" type="file" accept=".csv,text/csv,text/plain" class="sr-only" aria-hidden="true" />
   </header>
 
   <div class="container">
-    <section class="card">
-      <h2>基本設定</h2>
+    <section class="card" aria-labelledby="basic-setting-title">
+      <h2 id="basic-setting-title">基本設定</h2>
       <div class="content">
         <div class="row">
           <div>
             <label for="sheetW">原板 幅 (mm)</label>
-            <input id="sheetW" type="number" value="1820" />
+            <input id="sheetW" inputmode="numeric" type="number" min="1" value="1820" />
           </div>
           <div>
             <label for="sheetH">原板 高さ (mm)</label>
-            <input id="sheetH" type="number" value="910" />
+            <input id="sheetH" inputmode="numeric" type="number" min="1" value="910" />
           </div>
         </div>
-
         <div class="row" style="margin-top:8px">
           <div>
-            <label for="kerf">ノコ刃厚 (mm)</label>
-            <input id="kerf" type="number" step="0.1" value="3" />
+            <label for="kerf">ノコ刃厚(ケルフ) (mm)</label>
+            <input id="kerf" inputmode="decimal" type="number" min="0" step="0.1" value="3" />
           </div>
           <div>
             <label for="margin">マージン (mm)</label>
-            <input id="margin" type="number" step="0.1" value="5" />
+            <input id="margin" inputmode="decimal" type="number" min="0" step="0.1" value="5" />
           </div>
         </div>
 
         <h3 style="margin:14px 0 6px; font-size:13px; color:#c9cff7">部材リスト</h3>
-
-        <div style="max-height:260px; overflow:auto; border:1px solid var(--muted); border-radius:8px">
+        <div style="max-height:260px; overflow:auto; border:1px solid var(--muted); border-radius:8px" aria-label="部材リスト">
           <table id="partsTable">
             <thead>
               <tr><th>名前</th><th>幅</th><th>高</th><th>数</th><th>回転</th><th></th></tr>
@@ -118,36 +116,37 @@
             <tbody></tbody>
           </table>
         </div>
+        <div class="hint">Enterでセル確定、Ctrl/⌘+Enterで行追加。主要操作は上部メニューにもあります。</div>
 
-        <div class="hint">Enterでセル確定、Ctrl/⌘+Enterで行追加。</div>
-
+        <!-- CSV説明（短縮） -->
         <div style="margin-top:8px; font-size:12px; color:#cbd3ff; border:1px solid var(--muted); padding:8px; background:#121636; border-radius:8px">
-          <strong>CSVの列構造</strong><br>
-          名前, 幅, 高, 数量, 回転可(1/0)
+          <div style="font-weight:700; margin-bottom:6px; color:#e7e9f7">CSVの列構造（インポート用）</div>
+          <div style="line-height:1.7">
+            ・列順序：<code>名前, 幅(mm), 高(mm), 数量, 回転可(1=可,0=不可)</code><br/>
+            ・1行目はヘッダでもOK（自動スキップ）<br/>
+            ・幅/高は数値（mmを付けない）<br/>
+            ・回転可は <code>1=可</code> / <code>0=不可</code>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>プレビュー</h2>
+    <section class="card" aria-labelledby="preview-title">
+      <h2 id="preview-title">プレビュー</h2>
       <div class="content">
-        <div class="stats" id="stats"></div>
+        <div class="stats" id="stats" aria-live="polite"></div>
         <div id="sheets"></div>
       </div>
     </section>
   </div>
 
-  <!-- =============== SCRIPT 全体を IIFE + DOMContentLoaded に変更 =============== -->
   <script>
-  document.addEventListener("DOMContentLoaded", () => {
-  (() => {
-
-    const $  = (s,el=document)=>el.querySelector(s);
+    // ====== ユーティリティ ======
+    const $ = (s,el=document)=>el.querySelector(s);
     const $$ = (s,el=document)=>[...el.querySelectorAll(s)];
     const EPS = 1e-6;
 
-    /* ここから下はあなたの元コードそのまま（$ 衝突修正 + escapeHtml 修正のみ） */
-
+    // ====== 永続化 ======
     const STORAGE_KEY = 'kitorizu:minapp:v4';
     function saveState(){
       const state = {
@@ -170,15 +169,16 @@
       }catch{ return false; }
     }
 
+    // ====== 部材テーブル ======
     function addRow(pref={name:'',w:100,h:100,qty:1,rot:true}){
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input class="name" value="${escapeHtml(pref.name||'')}"></td>
-        <td><input class="w" type="number" min="1" value="${pref.w}"></td>
-        <td><input class="h" type="number" min="1" value="${pref.h}"></td>
-        <td><input class="qty" type="number" min="1" value="${pref.qty}"></td>
-        <td style="text-align:center"><input class="rot" type="checkbox" ${pref.rot?'checked':''}></td>
-        <td><button class="del">削除</button></td>`;
+        <td><input class="name" placeholder="例: 棚板A" value="${escapeHtml(pref.name||'')}"></td>
+        <td><input class="w" type="number" inputmode="numeric" min="1" value="${pref.w}"></td>
+        <td><input class="h" type="number" inputmode="numeric" min="1" value="${pref.h}"></td>
+        <td><input class="qty" type="number" inputmode="numeric" min="1" value="${pref.qty}"></td>
+        <td style="text-align:center"><input class="rot" type="checkbox" ${pref.rot?'checked':''} aria-label="回転可"></td>
+        <td style="width:1%"><button class="del" title="削除">削除</button></td>`;
       const tbody=$('#partsTable tbody');
       tbody.appendChild(tr);
       $('.del',tr).addEventListener('click',()=>{ tr.remove(); run(); saveState(); });
@@ -189,7 +189,6 @@
         });
       });
     }
-
     function clampInputs(tr){
       const w=$('.w',tr), h=$('.h',tr), q=$('.qty',tr);
       w.value = Math.max(1, Math.floor(+w.value||0));
@@ -207,22 +206,332 @@
       })).filter(p=>p.w>0&&p.h>0&&p.qty>0);
     }
 
-    function planLayout(parts, sheetW, sheetH, kerf, margin, opts={}){ /* 略：あなたの元コードそのまま */ }
-    function calcStats(result, parts){ /* 略：同じ */ }
-    function renderStats(stats){ /* 略：同じ */ }
-    function renderSheets(result){ /* 略：同じ */ }
+    // ====== レイアウト（多開始ギロチン + 空き領域マージ） ======
+    function planLayout(parts, sheetW, sheetH, kerf, margin, opts={}){
+      const workW = Math.max(1, sheetW - margin*2);
+      const workH = Math.max(1, sheetH - margin*2);
+      const K = Math.max(0, kerf||0);
 
-    function printPDF(){ /* 略：同じ */ }
+      // 展開
+      const base=[]; for(const p of parts){ for(let i=0;i<p.qty;i++) base.push({name:p.name,w:p.w,h:p.h,rot:p.rot}); }
 
-    /* escapeHtml 修正版 */
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"]/g,
-        c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])
-      );
+      const orders = [
+        {fn:(a,b)=>Math.max(b.w,b.h)-Math.max(a.w,a.h) || (b.w*b.h)-(a.w*a.h)}, // maxSide
+        {fn:(a,b)=>(b.w*b.h)-(a.w*a.h)},                                        // area
+        {fn:(a,b)=>b.h-a.h || b.w-a.w},                                         // height
+        {fn:(a,b)=>b.w-a.w || b.h-a.h},                                         // width
+        {fn:(a,b)=>Math.abs(a.w/a.h-1)-Math.abs(b.w/b.h-1)},                    // square-ish
+        {fn:null},                                                              // random
+      ];
+      const splits = [
+        (n,r)=>[{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h},{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K}], // right→down
+        (n,r)=>[{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K},{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h}], // down→right
+        (n,r)=> (n.w-r.w < n.h-r.h)
+               ? [{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h},{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K}]
+               : [{x:n.x,y:n.y+r.h+K,w:n.w,h:n.h-r.h-K},{x:n.x+r.w+K,y:n.y,w:n.w-r.w-K,h:r.h}],
+      ];
+
+      const tries = Math.max(12, opts.tries || 28);
+      let best = null;
+
+      for(let t=0;t<tries;t++){
+        const items = base.map(o=>({...o}));
+        const ord = orders[t % orders.length];
+        if(ord.fn) items.sort(ord.fn); else shuffle(items, 17*t+3);
+        const splitFn = splits[t % splits.length];
+        const res = pack(items, splitFn);
+        if(!best || better(res,best)) best = res;
+      }
+      return best;
+
+      function pack(items, splitFn){
+        const sheets=[]; let s=newSheet(); sheets.push(s);
+        for(const it of items){
+          if(!placeOnAnySheet(it)){ s=newSheet(); sheets.push(s); if(!place(s,it)) throw new Error(`入らない部材: ${it.name} ${it.w}×${it.h}mm`); }
+        }
+        const result = {sheets, workW, workH, margin, kerf:K};
+        result.waste = totalWaste(result);
+        return result;
+
+        function newSheet(){ return {nodes:[{x:0,y:0,w:workW,h:workH}], rects:[]}; }
+        function placeOnAnySheet(rect){ for(const sh of sheets){ if(place(sh,rect)) return true; } return false; }
+
+        function place(sheet, rect){
+          const orients = rect.rot ? [[rect.w,rect.h],[rect.h,rect.w]] : [[rect.w,rect.h]];
+          let bi=-1, bo=null, bs=Infinity;
+          for(const [rw,rh] of orients){
+            for(let i=0;i<sheet.nodes.length;i++){
+              const n=sheet.nodes[i];
+              if(rw<=n.w && rh<=n.h){
+                const leftover=(n.w-rw)*(n.h-rh);
+                const edge=Math.abs(n.w-rw)+Math.abs(n.h-rh);
+                const sc = leftover + edge*0.02;
+                if(sc<bs){ bs=sc; bi=i; bo=[rw,rh]; }
+              }
+            }
+          }
+          if(bi<0) return false;
+
+          const [rw,rh]=bo; const n=sheet.nodes[bi]; const x=n.x, y=n.y;
+          sheet.rects.push({x,y,w:rw,h:rh,name:rect.name,rot:(rw!==rect.w)});
+          const frags = splitFn(n,{w:rw,h:rh});
+          sheet.nodes.splice(bi,1);
+          for(const f of frags){ const g={x:f.x,y:f.y,w:Math.max(0,f.w),h:Math.max(0,f.h)}; if(g.w>EPS && g.h>EPS) sheet.nodes.push(g); }
+          normalize(sheet);
+          return true;
+        }
+
+        function normalize(sheet){
+          sheet.nodes = sheet.nodes.filter(a=>a.w>EPS && a.h>EPS);
+          sheet.nodes = sheet.nodes.filter((a,i,arr)=>!arr.some((b,j)=>i!==j && b.x<=a.x && b.y<=a.y && (b.x+b.w)>=(a.x+a.w) && (b.y+b.h)>=(a.y+a.h)));
+          merge(sheet,'h'); merge(sheet,'v');
+        }
+        function almost(a,b){ return Math.abs(a-b) < EPS; }
+        function merge(sheet, axis){
+          let changed=true;
+          while(changed){
+            changed=false;
+            outer: for(let i=0;i<sheet.nodes.length;i++){
+              for(let j=i+1;j<sheet.nodes.length;j++){
+                const a=sheet.nodes[i], b=sheet.nodes[j];
+                if(axis==='h'){
+                  if(almost(a.y,b.y) && almost(a.h,b.h) &&
+                     (almost(a.x+a.w+K,b.x) || almost(b.x+b.w+K,a.x))){
+                    sheet.nodes.splice(j,1); sheet.nodes.splice(i,1);
+                    sheet.nodes.push({x:Math.min(a.x,b.x), y:a.y, w:a.w+b.w+K, h:a.h});
+                    changed=true; break outer;
+                  }
+                }else{
+                  if(almost(a.x,b.x) && almost(a.w,b.w) &&
+                     (almost(a.y+a.h+K,b.y) || almost(b.y+b.h+K,a.y))){
+                    sheet.nodes.splice(j,1); sheet.nodes.splice(i,1);
+                    sheet.nodes.push({x:a.x, y:Math.min(a.y,b.y), w:a.w, h:a.h+b.h+K});
+                    changed=true; break outer;
+                  }
+                }
+              }
+            }
+          }
+        }
+        function totalWaste(result){
+          const sheetArea = result.sheets.length * workW * workH;
+          const rectArea  = result.sheets.reduce((acc,s)=> acc + s.rects.reduce((a,r)=>a+r.w*r.h,0), 0);
+          return sheetArea - rectArea;
+        }
+      }
+      function better(a,b){
+        if(a.sheets.length !== b.sheets.length) return a.sheets.length < b.sheets.length;
+        if(a.waste !== b.waste) return a.waste < b.waste;
+        const na=a.sheets.reduce((s,sh)=>s+sh.nodes.length,0);
+        const nb=b.sheets.reduce((s,sh)=>s+sh.nodes.length,0);
+        return na<nb;
+      }
+      function shuffle(arr, seed=1){
+        let x = seed>>>0 || 1;
+        for(let i=arr.length-1;i>0;i--){
+          x = (1664525*x + 1013904223) >>> 0;
+          const j = x % (i+1);
+          [arr[i],arr[j]] = [arr[j],arr[i]];
+        }
+      }
     }
 
-    function parseCSV(text){ /* 略：同じ */ }
+    // ====== 統計表示 ======
+    function calcStats(result, parts){
+      const {sheets,workW,workH} = result;
+      const totalSheetArea = sheets.length * (workW*workH);
+      const partsArea = parts.reduce((a,p)=> a + p.w*p.h*p.qty, 0);
+      const waste = Math.max(0, totalSheetArea - partsArea);
+      const util = totalSheetArea>0 ? (partsArea/totalSheetArea*100) : 0;
+      return {sheetsCount:sheets.length, partsArea, waste, util};
+    }
+    function renderStats(stats){
+      const nf1 = new Intl.NumberFormat('ja-JP',{maximumFractionDigits:1});
+      const nf0 = new Intl.NumberFormat('ja-JP');
+      $('#stats').innerHTML = `
+        <span class="chip">原板: ${stats.sheetsCount} 枚</span>
+        <span class="chip">部材面積: ${nf0.format(stats.partsArea)} mm²</span>
+        <span class="chip">廃材面積: ${nf0.format(stats.waste)} mm²</span>
+        <span class="chip">利用率: ${nf1.format(stats.util)}%</span>
+      `;
+    }
 
+    // ====== 画面プレビュー（カラー） ======
+    function renderSheets(result){
+      const {sheets,workW,workH,margin}=result;
+      const wrap=$('#sheets'); wrap.innerHTML='';
+      const scale = Math.min(820/(workW+margin*2), 3);
+      sheets.forEach((sheet,idx)=>{
+        const W=(workW+margin*2)*scale, H=(workH+margin*2)*scale;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+        svg.setAttribute('width',W); svg.setAttribute('height',H);
+        svg.style.background="#0b102e"; svg.style.border="1px solid #2a2f4a"; svg.style.borderRadius='8px';
+        rect(svg, margin*scale, margin*scale, workW*scale, workH*scale, '#101533', '#8ea0ff', 2);
+        for(const r of sheet.rects){
+          const x=(margin+r.x)*scale, y=(margin+r.y)*scale, w=r.w*scale, h=r.h*scale;
+          rect(svg,x,y,w,h,'#2f6df6','#1d4ed8',1);
+          const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+          t.setAttribute('x', x+w/2); t.setAttribute('y', y+h/2);
+          t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+          t.setAttribute('fill','#e6f0ff');
+          t.setAttribute('font-size', Math.max(10,Math.min(16,Math.min(w,h)/6)));
+          t.textContent = `${r.name} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
+          svg.appendChild(t);
+        }
+        const title = document.createElementNS('http://www.w3.org/2000/svg','text');
+        title.setAttribute('x', 8); title.setAttribute('y', 16);
+        title.setAttribute('fill','#cbd3ff'); title.setAttribute('font-size','12');
+        title.textContent = `原板 #${idx+1}`;
+        svg.appendChild(title);
+        wrap.appendChild(svg);
+      });
+      function rect(svg,x,y,w,h,fill,stroke,sw){
+        const el=document.createElementNS('http://www.w3.org/2000/svg','rect');
+        el.setAttribute('x',x); el.setAttribute('y',y);
+        el.setAttribute('width',w); el.setAttribute('height',h);
+        el.setAttribute('rx','4'); el.setAttribute('fill',fill);
+        el.setAttribute('stroke',stroke); el.setAttribute('stroke-width',sw);
+        svg.appendChild(el);
+      }
+    }
+
+    // ====== 印刷（PDF＝線だけ） ======
+    function printPDF(){
+      const parts = getPartsFromTable();
+      if(parts.length===0){ alert('部材が空です'); return; }
+
+      const sheetW=+$('#sheetW').value, sheetH=+$('#sheetH').value;
+      const kerf=+$('#kerf').value, margin=+$('#margin').value;
+      if(sheetW<=0||sheetH<=0){ alert('原板サイズが不正です'); return; }
+
+      const res = planLayout(parts, sheetW, sheetH, kerf, margin, {tries: 40}); // PDF時は少し頑張る
+
+      // 集約表
+      const key = p=>`${p.name}|${p.w}|${p.h}|${p.rot?'1':'0'}`;
+      const map = new Map();
+      for(const p of parts){ const k=key(p); if(!map.has(k)) map.set(k,{...p}); else map.get(k).qty += p.qty; }
+      const list = [...map.values()].sort((a,b)=> (b.w*b.h)-(a.w*a.h));
+
+      const iframe = document.createElement('iframe');
+      Object.assign(iframe.style,{position:'fixed',right:'0',bottom:'0',width:'0',height:'0',border:'0'});
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>木取り図 印刷（線画）</title>
+        <style>
+          @page{ size:A4 portrait; margin:12mm }
+          body{ font-family:"Noto Sans JP","Yu Gothic","Meiryo",sans-serif; color:#000; background:#fff }
+          h1{ font-size:14px; margin:0 0 6px }
+          .page{ page-break-after:always; }
+          .page:last-child{ page-break-after:auto }
+          table{ border-collapse:collapse; width:100%; font-size:12px; margin:6px 0 }
+          th,td{ border:1px solid #000; padding:3px 5px; text-align:left }
+          .meta{ font-size:12px; color:#000; margin-bottom:6px }
+          .sheet{ margin-top:6mm }
+          svg{ max-width:100%; height:auto }
+        </style>
+      </head><body>`);
+
+      // 1ページ目：部材表
+      doc.write(`<div class="page">
+        <h1>木取り図／部材リスト</h1>
+        <div class="meta">原板: ${sheetW} × ${sheetH} mm　ケルフ: ${kerf} mm　マージン: ${margin} mm</div>
+        <table>
+          <thead><tr><th>名前</th><th>幅</th><th>高</th><th>数量</th><th>回転</th></tr></thead>
+          <tbody>${list.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td>${p.w}</td><td>${p.h}</td><td>${p.qty}</td><td>${p.rot?'可':'不可'}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>`);
+
+      // 2ページ目以降：線のみのシート
+      const {sheets,workW,workH} = res;
+      const strokeW = 0.8;
+      sheets.forEach((sheet,i)=>{
+        const pad = 12, W = workW + pad*2, H = workH + pad*2;
+        const partsSvg = [
+          `<rect x="${pad}" y="${pad}" width="${workW}" height="${workH}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`
+        ];
+        for(const r of sheet.rects){
+          const x=pad+r.x, y=pad+r.y;
+          partsSvg.push(`<rect x="${x}" y="${y}" width="${r.w}" height="${r.h}" fill="none" stroke="#000" stroke-width="${strokeW}"/>`);
+          const fs = 40;  // ★ここだけ変更：部材ラベルのフォントサイズを固定（必要なら値を調整）
+          const label = `${escapeHtml(r.name)} ${Math.round(r.w)}×${Math.round(r.h)}${r.rot?' (↺)':''}`;
+          partsSvg.push(`<text x="${x+r.w/2}" y="${y+r.h/2}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" fill="#000">${label}</text>`);
+        }
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${partsSvg.join('')}</svg>`;
+        doc.write(`<div class="page"><h1>原板 #${i+1}</h1><div class="sheet">${svg}</div></div>`);
+      });
+
+      doc.write(`</body></html>`); doc.close();
+      const iw = iframe.contentWindow;
+      setTimeout(()=>{ try{ iw.focus(); iw.print(); }catch{ alert('印刷がブロックされました。ポップアップ許可を確認してください。'); }
+        setTimeout(()=>{ document.body.removeChild(iframe); }, 600);
+      }, 300);
+    }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;"}[c])); }
+
+    // ====== CSVパーサ（安全・簡潔） ======
+    function parseCSV(text){
+      const raw = String(text).replace(/^\uFEFF/,'').replace(/\r\n|\r|\n/g,'\n');
+      const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l && !l.startsWith('#'));
+      const out=[]; if(lines.length===0) return out;
+      const delim = detectDelimiter(lines.slice(0,Math.min(lines.length,3)));
+      for(let i=0;i<lines.length;i++){
+        const cols = splitCSVLine(lines[i], delim); if(cols.length===0) continue;
+        const [cName,cW,cH,cQty='1',cRot='1'] = cols;
+        const w   = normalizeNumber(cW);
+        const h   = normalizeNumber(cH);
+        const qty = normalizeInt(cQty,1);
+        const rot = normalizeBool(cRot,true);
+        if((!Number.isFinite(w)||!Number.isFinite(h)) && i===0) continue; // ヘッダスキップ
+        if(Number.isFinite(w)&&Number.isFinite(h)&&w>0&&h>0&&qty>0){
+          out.push({name:String(cName??'-').trim()||'-', w, h, qty:Math.max(1,qty), rot});
+        }
+      }
+      return out;
+    }
+    function detectDelimiter(sampleLines){
+      const cands=[',',';','\t','、','，']; let best=',',score=-1;
+      for(const c of cands){ const s=sampleLines.reduce((a,l)=>a+((l.split(c).length-1)||0),0); if(s>score){best=c;score=s;} }
+      return best;
+    }
+    function splitCSVLine(line, delim){
+      const out=[]; let cur=''; let inQ=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(inQ){
+          if(ch==='"'){ if(i+1<line.length && line[i+1]==='"'){cur+='"';i++;} else {inQ=false;} }
+          else cur+=ch;
+        }else{
+          if(ch==='"') inQ=true;
+          else if(ch===delim){ out.push(cur); cur=''; }
+          else cur+=ch;
+        }
+      }
+      out.push(cur);
+      return out.map(s=>s.trim());
+    }
+    function normalizeNumber(s){
+      if(s==null) return NaN;
+      let t=String(s).trim();
+      t=t.replace(/[０-９．]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+      t=t.replace(/(mm|㎜)/gi,'').replace(/\s+/g,'').replace(/,/g,'');
+      const v=Number(t); return Number.isFinite(v)?v:NaN;
+    }
+    function normalizeInt(s,def=0){
+      if(s==null) return def;
+      const n=parseInt(String(s).replace(/,/g,'').trim(),10);
+      return Number.isFinite(n)?n:def;
+    }
+    function normalizeBool(s,def=true){
+      const t=String(s??'').trim().toLowerCase();
+      if(['1','true','t','yes','y','可','はい'].includes(t)) return true;
+      if(['0','false','f','no','n','不可','いいえ'].includes(t)) return false;
+      return def;
+    }
+
+    // ====== 実行 ======
     function run(opts={}){
       try{
         const parts=getPartsFromTable();
@@ -235,36 +544,46 @@
       }catch(e){ alert(e.message||String(e)); }
     }
 
-    /* ====== イベント設定 ====== */
+    // ====== イベント ======
     $('#topAddRow').addEventListener('click',()=>{ addRow(); run(); saveState(); });
     $('#topClear').addEventListener('click',()=>{ setPartsTable([]); run(); saveState(); });
     $('#topRun').addEventListener('click',()=>{ run({tries:28}); saveState(); });
-
     $('#topOpt').addEventListener('click', async ()=>{
-      const btn = $('#topOpt');
-      const old = btn.textContent;
+      const btn = $('#topOpt'); const old = btn.textContent;
       btn.disabled = true; btn.textContent = '探索中…';
-      try{ run({tries:80}); saveState(); }
-      finally { btn.disabled=false; btn.textContent=old; }
+      try{ run({tries:80}); saveState(); } finally { btn.disabled=false; btn.textContent=old; }
     });
-
     $('#topImport').addEventListener('click',()=>$('#csvFile').click());
-    $('#csvFile').addEventListener('change', async (ev)=>{ /* 略：元コード */ });
-
+    $('#csvFile').addEventListener('change', async (ev)=>{
+      const file = ev.target.files && ev.target.files[0]; if(!file) return;
+      try{
+        const buf = await file.arrayBuffer();
+        let text='';
+        try{
+          text = new TextDecoder('utf-8',{fatal:false}).decode(buf);
+          const bad=(text.match(/�/g)||[]).length;
+          if(bad>5){ text = new TextDecoder('shift_jis',{fatal:false}).decode(buf); }
+        }catch{
+          text = new TextDecoder('shift_jis',{fatal:false}).decode(buf);
+        }
+        const parts = parseCSV(text);
+        if(parts.length===0){
+          alert('CSVに有効なデータが見つかりませんでした\n\nチェック:\n・区切りは カンマ/セミコロン/タブ/読点 か\n・幅/高さは数値（mm を付けない）か\n・1行目がヘッダでもOK（自動スキップ）');
+          return;
+        }
+        setPartsTable(parts); run(); saveState();
+      }catch(err){ console.error(err); alert('CSVの解析に失敗しました'); }
+      ev.target.value='';
+    });
     $('#topPDF').addEventListener('click', printPDF);
 
     ['#sheetW','#sheetH','#kerf','#margin'].forEach(sel=>{
       $(sel).addEventListener('change', ()=>{ run(); saveState(); });
     });
 
-    /* ===== 初期表示 ===== */
-    if(!loadState()){
-      setPartsTable([{name:'棚板A',w:300,h:200,qty:2,rot:true}]);
-    }
+    // 初期表示
+    if(!loadState()){ setPartsTable([{name:'棚板A',w:300,h:200,qty:2,rot:true}]); }
     run({tries:28});
-
-  })();
-  });
   </script>
 </body>
 </html>
