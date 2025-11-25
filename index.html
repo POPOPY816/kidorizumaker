@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>木取り図メーカー（保管版）</title>
+<title>木取り図メーカー（修正版）</title>
 <style>
 :root{--bg:#0f1220;--panel:#161a2e;--muted:#2a2f4a;--text:#e7e9f7;--sub:#a9afd4;--accent:#5b7cff;--accent-2:#2f6df6}
-html,body{height:100%;margin:0}body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans JP","Meiryo",system-ui}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans JP","Meiryo",system-ui}
 header{padding:12px 16px;background:#121636;border-bottom:1px solid #20264a;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
 header .spacer{flex:1}h1{margin:0;font-size:16px}
 header .menu{display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -17,7 +17,7 @@ header .menu{display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;-webkit-overf
 .content{padding:12px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px}
-input,select{width:100%;padding:10px 12px;background:#0f1330;border:1px solid var(--muted);color:var(--text);border-radius:8px}
+input{width:100%;padding:10px 12px;background:#0f1330;border:1px solid var(--muted);color:var(--text);border-radius:8px}
 button{padding:10px 14px;background:#0f1330;border:1px solid var(--muted);color:var(--text);border-radius:8px;cursor:pointer}
 header .menu button{width:auto;white-space:nowrap;min-width:110px;font-size:13px}
 .btn-primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));border:1px solid #2a4cf6;color:#fff;font-weight:600}
@@ -32,7 +32,7 @@ td input[type="checkbox"]{transform: translateY(2px)}
 </head>
 <body>
 <header>
-<h1>木取り図メーカー（保管版）</h1>
+<h1>木取り図メーカー（修正版）</h1>
 <div class="spacer"></div>
 <div class="menu">
 <button id="topAddRow">行を追加</button>
@@ -112,7 +112,7 @@ function getParts(){
   }).filter(p=>p.w>0&&p.h>0);
 }
 
-// 簡易パッキング（左上から順に置く）
+// パッキング（簡易ヒューリスティック）
 function planLayout(parts,sheetW,sheetH,kerf,margin){
   const sheets=[{parts:[],width:sheetW,height:sheetH}];
   for(const part of parts){
@@ -132,7 +132,7 @@ function planLayout(parts,sheetW,sheetH,kerf,margin){
 }
 
 function findPosition(sheet,part,kerf,margin){
-  const step=5; // mm単位で探索
+  const step=5;
   const maxX=sheet.width-part.w-margin;
   const maxY=sheet.height-part.h-margin;
   for(let y=margin;y<=maxY;y+=step){
@@ -181,10 +181,7 @@ function renderSheets(sheets){
 
 function calcStats(sheets){
   let usedArea=0,totalArea=0;
-  sheets.forEach(s=>{
-    totalArea+=s.width*s.height;
-    s.parts.forEach(p=>usedArea+=p.w*p.h);
-  });
+  sheets.forEach(s=>{totalArea+=s.width*s.height;s.parts.forEach(p=>usedArea+=p.w*p.h)});
   return {sheetCount:sheets.length, utilization:(usedArea/totalArea*100).toFixed(1)+'%'};
 }
 
@@ -203,13 +200,12 @@ function run(){
 // 初期データ
 addRow({name:'棚板A',w:300,h:200,qty:2,rot:true});
 
-// ボタンイベント
+// ボタン
 $('#topAddRow').addEventListener('click',()=>addRow());
 $('#topClear').addEventListener('click',()=>{$('#partsTable tbody').innerHTML=''; run();});
 $('#topRun').addEventListener('click',run);
 
 run();
-});
 </script>
 </body>
 </html>
