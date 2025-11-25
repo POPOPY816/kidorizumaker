@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>木取り図メーカー（CSV + 最適化版）</title>
+<title>木取り図メーカー（安定版）</title>
 <style>
 :root{--bg:#0f1220;--panel:#161a2e;--muted:#2a2f4a;--text:#e7e9f7;--sub:#a9afd4;--accent:#5b7cff;--accent-2:#2f6df6}
 body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans JP","Meiryo",system-ui}
@@ -224,7 +224,7 @@ $('#csvFile').addEventListener('change',e=>{
   const file=e.target.files[0];
   if(!file) return;
   const reader=new FileReader();
-  reader.onload=()=>{ 
+  reader.onload=()=>{
     const arr=parseCSV(reader.result);
     $('#partsTable tbody').innerHTML='';
     arr.forEach(p=>addRow({name:p.name,w:p.w,h:p.h,qty:p.qty,rot:p.rot}));
