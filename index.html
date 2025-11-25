@@ -107,7 +107,7 @@ function getParts(){
     const name=$('.name',tr).value.trim();
     const w=+$('.w',tr).value;
     const h=+$('.h',tr).value;
-    const qty=+$('.qty',tr).value;
+    const qty=Math.max(1,+$('.qty',tr).value||1);
     const rot=$('.rot',tr).checked;
     return Array.from({length:qty},()=>({name,w,h,rot}));
   }).filter(p=>p.w>0&&p.h>0);
@@ -141,7 +141,7 @@ function findPosition(sheet,part,kerf,margin){
       if(!overlapsAny(rect,sheet.parts,kerf)) return rect;
       if(part.rot){
         const rect2={x,y,w:part.h,h:part.w};
-        if(x+part.h+margin<=sheet.width && y+part.w+margin<=sheet.height)
+        if(rect2.x + rect2.w + margin <= sheet.width && rect2.y + rect2.h + margin <= sheet.height)
           if(!overlapsAny(rect2,sheet.parts,kerf)) return rect2;
       }
     }
@@ -160,6 +160,7 @@ function rectanglesOverlap(a,b,kerf){
 
 function renderSheets(sheets){
   const container=$('#sheets'); container.innerHTML='';
+  if(!sheets || sheets.length===0) return;
   const sheetW=+$('#sheetW').value,sheetH=+$('#sheetH').value;
   const scale=Math.min(500/sheetW,300/sheetH);
   for(const sheet of sheets){
@@ -191,6 +192,11 @@ function run(opts={tries:1}){
   const sheetH=+$('#sheetH').value;
   const kerf=+$('#kerf').value;
   const margin=+$('#margin').value;
+  if(parts.length===0) {
+    $('#sheets').innerHTML='';
+    $('#stats').textContent='部材がありません';
+    return;
+  }
   let bestSheets=null;
   let bestUtil=0;
   for(let i=0;i<opts.tries;i++){
@@ -199,6 +205,7 @@ function run(opts={tries:1}){
     const util=parseFloat(calcStats(sheets).utilization);
     if(util>bestUtil){bestUtil=util;bestSheets=sheets;}
   }
+  if(!bestSheets) bestSheets=[];
   renderSheets(bestSheets);
   const st=calcStats(bestSheets);
   $('#stats').textContent=`板数: ${st.sheetCount} / 利用率: ${st.utilization}`;
@@ -207,7 +214,13 @@ function run(opts={tries:1}){
 function parseCSV(text){
   return text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l).map(l=>{
     const [name,w,h,qty,rot]=l.split(',');
-    return {name:name.trim(),w:+w,h:+h,qty:+qty,rot:rot.trim()==='1'};
+    return {
+      name: name.trim(),
+      w: +w || 1,
+      h: +h || 1,
+      qty: Math.max(1,+qty||1),
+      rot: rot?.trim()==='1'
+    };
   });
 }
 
