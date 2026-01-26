@@ -2,19 +2,19 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>木取り最適化（完成版）</title>
+<title>木取り計算（最適化版）</title>
 <style>
 body { font-family: "Yu Gothic","Meiryo",sans-serif; margin:20px; }
 textarea { width:100%; height:140px; }
 button { padding:6px 12px; margin-top:8px; }
 .sheet { margin:20px 0; border:2px solid #000; padding:10px; }
-.preview svg { width:100%; max-width:900px; border:1px solid #000; }
 .info { margin-bottom:6px; font-size:14px; }
+.preview svg { width:100%; max-width:900px; border:1px solid #000; }
 </style>
 </head>
 <body>
 
-<h2>木取り計算（最終版）</h2>
+<h2>木取り計算（実用最適化版）</h2>
 
 <div>
 板サイズ：
@@ -31,7 +31,7 @@ button { padding:6px 12px; margin-top:8px; }
 </textarea>
 
 <br>
-<button onclick="calc()">計算</button>
+<button onclick="calc()">表示</button>
 <button onclick="pdf()">PDF</button>
 
 <div id="view"></div>
@@ -39,31 +39,17 @@ button { padding:6px 12px; margin-top:8px; }
 <script>
 const MARGIN = 10;
 const KERF = 4;
-const TRY_COUNT = 12;
 
 // ---------- CSV ----------
 function parseCSV(text){
   return text.trim().split(/\n/).map(l=>{
     const p=l.split(",");
-    return {name:p[0],w:+p[1],h:+p[2],q:+p[3]};
+    return { name:p[0], w:+p[1], h:+p[2], q:+p[3] };
   });
 }
 
 // ---------- メイン ----------
-function solve(parts,W,H){
-  let best=null;
-
-  for(let t=0;t<TRY_COUNT;t++){
-    const result = layout(parts,W,H,t);
-    if(!best || result.score > best.score){
-      best = result;
-    }
-  }
-  return best;
-}
-
-// ---------- 配置 ----------
-function layout(parts,W,H,seed){
+function layout(parts,W,H){
   const usableW=W-MARGIN*2;
   const usableH=H-MARGIN*2;
 
@@ -72,85 +58,97 @@ function layout(parts,W,H,seed){
     for(let i=0;i<p.q;i++) items.push({...p});
   });
 
-  // 高さクラスタ + ランダム性
+  // 面積 → 高さ優先
   items.sort((a,b)=>{
-    const ha = Math.round(a.h/50);
-    const hb = Math.round(b.h/50);
-    if(ha!==hb) return hb-ha;
-    return (b.w*b.h)-(a.w*a.h)+(Math.random()-0.5)*seed*50;
+    const da=b.w*b.h-a.w*a.h;
+    if(da!==0) return da;
+    return b.h-a.h;
   });
 
-  let free=[{x:MARGIN,y:MARGIN,w:usableW,h:usableH}];
-  let placed=[];
+  const sheets=[];
 
-  for(const p of items){
-    let best=null;
+  while(items.length){
+    let free=[{x:MARGIN,y:MARGIN,w:usableW,h:usableH}];
+    let placed=[];
 
-    for(const r of free){
-      for(const rot of [false,true]){
-        const pw=rot?p.h:p.w;
-        const ph=rot?p.w:p.h;
-        if(pw>r.w||ph>r.h) continue;
+    for(let i=0;i<items.length;i++){
+      const p=items[i];
+      let best=null;
 
-        const heightGap=Math.abs(r.h-ph);
-        const widthGap=Math.abs(r.w-pw);
-        const waste=(r.w*r.h)-(pw*ph);
+      for(const r of free){
+        for(const rot of [false,true]){
+          const pw=rot?p.h:p.w;
+          const ph=rot?p.w:p.h;
+          if(pw>r.w || ph>r.h) continue;
 
-        const score =
-          -heightGap*5
-          -widthGap*2
-          -waste*0.01;
+          // 評価関数（人間寄り）
+          const waste=(r.w*r.h)-(pw*ph);
+          const heightGap=Math.abs((r.h-ph));
+          const score = waste + heightGap*2;
 
-        if(!best||score>best.score){
-          best={r,pw,ph,rot,score};
+          if(!best || score<best.score){
+            best={r,pw,ph,rot,score};
+          }
         }
+      }
+
+      if(best){
+        const r=best.r;
+
+        placed.push({
+          name:p.name,
+          x:r.x,y:r.y,
+          w:best.pw,h:best.ph,
+          rot:best.rot
+        });
+
+        const right={
+          x:r.x+best.pw+KERF,
+          y:r.y,
+          w:r.w-best.pw-KERF,
+          h:best.ph
+        };
+        const bottom={
+          x:r.x,
+          y:r.y+best.ph+KERF,
+          w:r.w,
+          h:r.h-best.ph-KERF
+        };
+
+        free=free.filter(f=>f!==r);
+        if(right.w>20 && right.h>20) free.push(right);
+        if(bottom.w>20 && bottom.h>20) free.push(bottom);
+
+        items.splice(i,1);
+        i--;
       }
     }
 
-    if(!best) continue;
-
-    const r=best.r;
-    placed.push({
-      name:p.name,
-      x:r.x,y:r.y,
-      w:best.pw,h:best.ph,
-      rot:best.rot
-    });
-
-    const right={
-      x:r.x+best.pw+KERF,
-      y:r.y,
-      w:r.w-best.pw-KERF,
-      h:best.ph
-    };
-    const bottom={
-      x:r.x,
-      y:r.y+best.ph+KERF,
-      w:r.w,
-      h:r.h-best.ph-KERF
-    };
-
-    free=free.filter(f=>f!==r);
-    if(right.w>30&&right.h>30) free.push(right);
-    if(bottom.w>30&&bottom.h>30) free.push(bottom);
+    sheets.push(placed);
   }
 
-  const area=(W-MARGIN*2)*(H-MARGIN*2);
-  const used=placed.reduce((s,r)=>s+r.w*r.h,0);
-  const rate=Math.round(used/area*100);
+  return sheets;
+}
 
-  return {placed,score:rate,rate};
+// ---------- 使用率 ----------
+function usage(sheet,W,H){
+  const area=(W-MARGIN*2)*(H-MARGIN*2);
+  const used=sheet.reduce((s,r)=>s+r.w*r.h,0);
+  return Math.round(used/area*100);
 }
 
 // ---------- 描画 ----------
-function draw(res,W,H){
-  return `
-  <div class="sheet">
-    <div class="info">使用率 ${res.rate}%</div>
+function drawSheets(sheets,W,H){
+  return sheets.map((s,i)=>`
+  <div class="sheet preview">
+    <div class="info">
+      板${i+1}（${W}×${H}mm） 使用率 ${usage(s,W,H)}%
+    </div>
     <svg viewBox="0 0 ${W} ${H}">
       <rect width="${W}" height="${H}" fill="none" stroke="black"/>
-      ${res.placed.map(r=>`
-        <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
+      ${s.map(r=>`
+        <rect x="${r.x}" y="${r.y}"
+          width="${r.w}" height="${r.h}"
           fill="#eee" stroke="black"/>
         <text x="${r.x+6}" y="${r.y+16}" font-size="13">
           ${r.name}${r.rot?"(回転)":""}
@@ -160,15 +158,15 @@ function draw(res,W,H){
         </text>
       `).join("")}
     </svg>
-  </div>`;
+  </div>`).join("");
 }
 
 function calc(){
   const W=+w.value;
   const H=+h.value;
   const parts=parseCSV(csv.value);
-  const best=solve(parts,W,H);
-  view.innerHTML=draw(best,W,H);
+  const sheets=layout(parts,W,H);
+  view.innerHTML=drawSheets(sheets,W,H);
 }
 
 // ---------- PDF ----------
@@ -176,27 +174,36 @@ function pdf(){
   const W=+w.value;
   const H=+h.value;
   const parts=parseCSV(csv.value);
-  const best=solve(parts,W,H);
+  const sheets=layout(parts,W,H);
+  const date=new Date().toLocaleDateString();
 
   let html=`<html><head>
   <style>
   @page{size:A4 landscape;margin:10mm;}
   body{font-family:sans-serif;}
+  .page{page-break-after:always;}
   </style>
-  </head><body>
-  <svg width="277mm" height="190mm" viewBox="0 0 ${W} ${H}">
-  <rect width="${W}" height="${H}" fill="none" stroke="black"/>
-  ${best.placed.map(r=>`
-    <rect x="${r.x}" y="${r.y}"
-      width="${r.w}" height="${r.h}"
-      fill="#eee" stroke="black"/>
-    <text x="${r.x+6}" y="${r.y+16}" font-size="14">
-      ${r.name}
-    </text>
-  `).join("")}
-  </svg>
-  </body></html>`;
+  </head><body>`;
 
+  sheets.forEach((s,i)=>{
+    html+=`
+    <div class="page">
+      <div>木取り図 ${i+1}（${W}×${H} / 使用率${usage(s,W,H)}% / ${date}）</div>
+      <svg width="277mm" height="190mm" viewBox="0 0 ${W} ${H}">
+        <rect width="${W}" height="${H}" fill="none" stroke="black"/>
+        ${s.map(r=>`
+          <rect x="${r.x}" y="${r.y}"
+            width="${r.w}" height="${r.h}"
+            fill="#eee" stroke="black"/>
+          <text x="${r.x+6}" y="${r.y+16}" font-size="14">
+            ${r.name}
+          </text>
+        `).join("")}
+      </svg>
+    </div>`;
+  });
+
+  html+=`</body></html>`;
   const win=window.open();
   win.document.write(html);
   win.document.close();
