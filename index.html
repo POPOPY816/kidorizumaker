@@ -2,13 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>木取り計算（余白・ケルフ対応）</title>
+<title>木取り計算（改良版）</title>
 <style>
 body {
   font-family: "Yu Gothic", "Meiryo", sans-serif;
   margin: 20px;
 }
-
 textarea { width: 100%; height: 140px; }
 button { padding: 6px 12px; margin-top: 8px; }
 
@@ -33,7 +32,7 @@ button { padding: 6px 12px; margin-top: 8px; }
 </head>
 <body>
 
-<h2>木取り計算</h2>
+<h2>木取り計算（改良版）</h2>
 
 <div>
   板サイズ：
@@ -54,26 +53,23 @@ C,300,200,3
 <div id="view"></div>
 
 <script>
-// ===== 固定設定 =====
-const MARGIN = 10; // 板の外周余白(mm)
-const KERF   = 4;  // 刃幅(mm)
-
-// ===================
+const MARGIN = 10;
+const KERF   = 4;
 
 function parseCSV(text){
   return text.trim().split(/\n/).map(l=>{
     const p=l.split(",");
-    if(p.length!==4) return null;
     return {
       name:p[0].trim(),
       w:+p[1],
       h:+p[2],
       q:+p[3]
     };
-  }).filter(Boolean);
+  });
 }
 
-function layout(parts,W,H){
+// ===== ギロチン配置 =====
+function layout(parts, W, H){
   const usableW = W - MARGIN * 2;
   const usableH = H - MARGIN * 2;
 
@@ -82,57 +78,70 @@ function layout(parts,W,H){
     for(let i=0;i<p.q;i++) items.push({...p});
   });
 
-  items.sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+  items.sort((a,b)=>
+    Math.max(b.w,b.h) - Math.max(a.w,a.h)
+  );
 
-  let sheets=[[]];
-  let x=0,y=0,row=0;
+  let sheets=[];
+  let freeRects=[{
+    x:MARGIN, y:MARGIN,
+    w:usableW, h:usableH
+  }];
+
+  let current=[];
 
   for(const p of items){
-    let w = p.w + KERF;
-    let h = p.h + KERF;
-    let rot = false;
+    let placed=false;
 
-    if(w > usableW || h > usableH){
-      if(h <= usableW && w <= usableH){
-        [w,h] = [h,w];
-        rot = true;
+    for(let i=0;i<freeRects.length;i++){
+      const r=freeRects[i];
+
+      for(const rot of [false,true]){
+        const pw = (rot?p.h:p.w) + KERF;
+        const ph = (rot?p.w:p.h) + KERF;
+
+        if(pw<=r.w && ph<=r.h){
+          current.push({
+            name:p.name,
+            w:rot?p.h:p.w,
+            h:rot?p.w:p.h,
+            x:r.x,
+            y:r.y,
+            rot
+          });
+
+          freeRects.splice(i,1);
+          freeRects.push(
+            { x:r.x+pw, y:r.y, w:r.w-pw, h:ph },
+            { x:r.x, y:r.y+ph, w:r.w, h:r.h-ph }
+          );
+
+          placed=true;
+          break;
+        }
       }
+      if(placed) break;
     }
 
-    if(x + w > usableW){
-      x = 0;
-      y += row;
-      row = 0;
+    if(!placed){
+      sheets.push(current);
+      current=[];
+      freeRects=[{
+        x:MARGIN, y:MARGIN,
+        w:usableW, h:usableH
+      }];
+      items.unshift(p);
     }
-
-    if(y + h > usableH){
-      sheets.push([]);
-      x = 0;
-      y = 0;
-      row = 0;
-    }
-
-    sheets.at(-1).push({
-      ...p,
-      w: p.w,
-      h: p.h,
-      x: x + MARGIN,
-      y: y + MARGIN,
-      rot
-    });
-
-    x += w;
-    row = Math.max(row, h);
   }
 
+  if(current.length) sheets.push(current);
   return sheets;
 }
 
 function usage(sheet,W,H){
-  const area = (W - MARGIN*2) * (H - MARGIN*2);
-  const used = sheet.reduce(
-    (s,r)=>s+(r.w+KERF)*(r.h+KERF),0
-  );
+  const area=(W-MARGIN*2)*(H-MARGIN*2);
+  const used=sheet.reduce((s,r)=>
+    s+(r.w+KERF)*(r.h+KERF),0);
   return Math.round(used/area*100);
 }
 
@@ -143,8 +152,7 @@ function drawSheets(sheets,W,H){
         板${i+1}（${W}×${H}mm） 使用率 ${usage(s,W,H)}%
       </div>
       <svg viewBox="0 0 ${W} ${H}">
-        <rect width="${W}" height="${H}"
-          fill="none" stroke="black"/>
+        <rect width="${W}" height="${H}" fill="none" stroke="black"/>
         ${s.map(r=>`
           <rect x="${r.x}" y="${r.y}"
             width="${r.w}" height="${r.h}"
@@ -188,29 +196,26 @@ function pdf(){
 
   sheets.forEach((s,i)=>{
     html+=`
-      <div class="page">
-        <div>
-          木取り図 ${i+1}枚目（${W}×${H}mm / 使用率${usage(s,W,H)}% / ${date}）
-        </div>
-        <svg width="277mm" height="190mm"
-             viewBox="0 0 ${W} ${H}"
-             preserveAspectRatio="xMidYMid meet">
-          <rect width="${W}" height="${H}"
-            fill="none" stroke="black"/>
-          ${s.map(r=>`
-            <rect x="${r.x}" y="${r.y}"
-              width="${r.w}" height="${r.h}"
-              fill="#eee" stroke="black"/>
-            <text x="${r.x+6}" y="${r.y+16}" font-size="14">
-              ${r.name}${r.rot?"(回転)":""}
-            </text>
-            <text x="${r.x+6}" y="${r.y+32}" font-size="12">
-              ${r.w}×${r.h}
-            </text>
-          `).join("")}
-        </svg>
+    <div class="page">
+      <div>
+        木取り図 ${i+1}枚目（${W}×${H}mm / 使用率${usage(s,W,H)}% / ${date}）
       </div>
-    `;
+      <svg width="277mm" height="190mm"
+        viewBox="0 0 ${W} ${H}">
+        <rect width="${W}" height="${H}" fill="none" stroke="black"/>
+        ${s.map(r=>`
+          <rect x="${r.x}" y="${r.y}"
+            width="${r.w}" height="${r.h}"
+            fill="#eee" stroke="black"/>
+          <text x="${r.x+6}" y="${r.y+16}" font-size="14">
+            ${r.name}${r.rot?"(回転)":""}
+          </text>
+          <text x="${r.x+6}" y="${r.y+32}" font-size="12">
+            ${r.w}×${r.h}
+          </text>
+        `).join("")}
+      </svg>
+    </div>`;
   });
 
   html+=`</body></html>`;
@@ -223,4 +228,3 @@ function pdf(){
 </script>
 </body>
 </html>
-
