@@ -206,6 +206,36 @@ function pdf(){
   win.document.close();
   win.print();
 }
+        <svg
+          width="277mm"
+          height="190mm"
+          viewBox="0 0 ${W} ${H}"
+          preserveAspectRatio="xMidYMid meet">
+
+          <rect width="${W}" height="${H}"
+                fill="none" stroke="black"/>
+
+          ${s.map(r => `
+            <rect x="${r.x}" y="${r.y}"
+              width="${r.w}" height="${r.h}"
+              fill="#eee" stroke="black"/>
+
+            <text x="${r.x + 6}" y="${r.y + 16}" font-size="14">
+              ${r.name}${r.rot ? "(回転)" : ""}
+            </text>
+          `).join("")}
+        </svg>
+      </div>
+    `;
+  });
+
+  html += `</body></html>`;
+
+  const win = window.open();
+  win.document.write(html);
+  win.document.close();
+  win.print();
+}
 
   sheets.forEach((s,i)=>{
     html+=`
@@ -239,4 +269,5 @@ function pdf(){
 </script>
 </body>
 </html>
+
 
