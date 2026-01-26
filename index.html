@@ -208,33 +208,28 @@ function printPDF(result){
   <html>
   <head>
     <style>
-      @page { size: A4 landscape; margin: 0; }
+      @page {
+        size: A4 landscape;
+        margin: 0;
+      }
+
       body {
         margin: 0;
-        width: 100vw;
-        height: 100vh;
-        overflow: hidden;
       }
 
       .page {
-        width: 100vw;
-        height: 100vh;
+        width: 297mm;
+        height: 210mm;
         display: flex;
         align-items: center;
         justify-content: center;
       }
 
-      .wrap {
-        transform:
-          rotate(90deg)
-          scale(${Math.min(297 / h, 210 / w)});
-        transform-origin: center center;
-      }
-
       svg {
-        display: block;
-        width: ${w}px;
-        height: ${h}px;
+        width: 210mm;
+        height: 297mm;
+        transform: rotate(90deg);
+        transform-origin: center center;
         background: #eee;
         border: 1px solid #000;
       }
@@ -244,20 +239,25 @@ function printPDF(result){
   `;
 
   result.sheets.forEach(sheet=>{
-    html += `<div class="page"><div class="wrap">
-      <svg viewBox="0 0 ${w} ${h}">
-        ${sheet.rects.map(r=>`
-          <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
-            fill="#cce" stroke="#33f" stroke-width="2"/>
-          <text x="${r.x+4}" y="${r.y+14}" font-size="14">
-            ${r.name}
-          </text>
-        `).join("")}
-      </svg>
-    </div></div>`;
+    html += `
+      <div class="page">
+        <svg viewBox="0 0 ${w} ${h}">
+          ${sheet.rects.map(r=>`
+            <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
+              fill="#cce" stroke="#33f" stroke-width="2"/>
+            <text x="${r.x+4}" y="${r.y+14}" font-size="14">
+              ${r.name}
+            </text>
+          `).join("")}
+        </svg>
+      </div>
+    `;
   });
 
-  html += `</body></html>`;
+  html += `
+  </body>
+  </html>
+  `;
 
   const win = window.open("");
   win.document.write(html);
@@ -280,4 +280,5 @@ document.getElementById("pdfBtn").onclick=()=>{
 </script>
 </body>
 </html>
+
 
