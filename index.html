@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>木取り計算（印刷対応・完成版）</title>
+<title>木取り計算（完成版）</title>
 <style>
 body {
   font-family: "Yu Gothic", "Meiryo", sans-serif;
@@ -15,17 +15,20 @@ button { padding: 6px 12px; margin-top: 8px; }
 .sheet {
   margin: 20px 0;
   border: 2px solid #000;
-  display: inline-block;
+  padding: 10px;
 }
 
 .info {
-  margin: 6px 0;
+  margin-bottom: 6px;
   font-size: 14px;
 }
 
-svg {
-  max-width: 100%;
+/* プレビューは大きく表示 */
+.preview svg {
+  width: 100%;
+  max-width: 900px;
   height: auto;
+  border: 1px solid #000;
 }
 </style>
 </head>
@@ -54,16 +57,19 @@ C,300,200,3
 <script>
 function parseCSV(text){
   return text.trim().split(/\n/).map(l=>{
-    const p = l.split(",");
-    if(p.length !== 4) return null;
-    const w = +p[1], h = +p[2], q = +p[3];
-    if(!w || !h || !q) return null;
-    return { name:p[0].trim(), w, h, q };
+    const p=l.split(",");
+    if(p.length!==4) return null;
+    return {
+      name:p[0].trim(),
+      w:+p[1],
+      h:+p[2],
+      q:+p[3]
+    };
   }).filter(Boolean);
 }
 
-function layout(parts, W, H){
-  let items = [];
+function layout(parts,W,H){
+  let items=[];
   parts.forEach(p=>{
     for(let i=0;i<p.q;i++) items.push({...p});
   });
@@ -71,51 +77,48 @@ function layout(parts, W, H){
   items.sort((a,b)=>(b.w*b.h)-(a.w*a.h));
 
   let sheets=[[]];
-  let x=0, y=0, row=0;
+  let x=0,y=0,row=0;
 
   for(const p of items){
-    let w=p.w, h=p.h, rot=false;
+    let w=p.w,h=p.h,rot=false;
 
-    if(w>W || h>H){
-      if(h<=W && w<=H){
-        [w,h] = [h,w];
-        rot = true;
+    if(w>W||h>H){
+      if(h<=W&&w<=H){
+        [w,h]=[h,w];
+        rot=true;
       }
     }
 
-    if(x + w > W){
-      x = 0;
-      y += row;
-      row = 0;
+    if(x+w>W){
+      x=0;y+=row;row=0;
     }
-
-    if(y + h > H){
+    if(y+h>H){
       sheets.push([]);
-      x = 0; y = 0; row = 0;
+      x=0;y=0;row=0;
     }
 
-    sheets.at(-1).push({ ...p, w, h, x, y, rot });
-    x += w;
-    row = Math.max(row, h);
+    sheets.at(-1).push({...p,w,h,x,y,rot});
+    x+=w;
+    row=Math.max(row,h);
   }
   return sheets;
 }
 
-function usage(sheet, W, H){
+function usage(sheet,W,H){
   return Math.round(
-    sheet.reduce((s,r)=>s+r.w*r.h,0) / (W*H) * 100
+    sheet.reduce((s,r)=>s+r.w*r.h,0)/(W*H)*100
   );
 }
 
-function drawSheets(sheets, W, H){
+function drawSheets(sheets,W,H){
   return sheets.map((s,i)=>`
-    <div class="sheet">
+    <div class="sheet preview">
       <div class="info">
         板${i+1}（${W}×${H}mm） 使用率 ${usage(s,W,H)}%
       </div>
       <svg viewBox="0 0 ${W} ${H}">
         <rect width="${W}" height="${H}"
-              fill="none" stroke="black"/>
+          fill="none" stroke="black"/>
         ${s.map(r=>`
           <rect x="${r.x}" y="${r.y}"
             width="${r.w}" height="${r.h}"
@@ -133,60 +136,41 @@ function drawSheets(sheets, W, H){
 }
 
 function calc(){
-  const W = +w.value;
-  const H = +h.value;
-  const parts = parseCSV(csv.value);
-  const sheets = layout(parts, W, H);
-  view.innerHTML = drawSheets(sheets, W, H);
+  const W=+w.value;
+  const H=+h.value;
+  const parts=parseCSV(csv.value);
+  const sheets=layout(parts,W,H);
+  view.innerHTML=drawSheets(sheets,W,H);
 }
 
 function pdf(){
-  const W = +w.value;
-  const H = +h.value;
-  const parts = parseCSV(csv.value);
-  const sheets = layout(parts, W, H);
-  const today = new Date().toLocaleDateString();
+  const W=+w.value;
+  const H=+h.value;
+  const parts=parseCSV(csv.value);
+  const sheets=layout(parts,W,H);
+  const date=new Date().toLocaleDateString();
 
-  let html = `
-  <html>
-  <head>
+  let html=`
+  <html><head>
   <style>
-    @page {
-      size: A4 landscape;
-      margin: 10mm;
-    }
-    body {
-      font-family: sans-serif;
-    }
-    .page {
-      page-break-after: always;
-    }
-    .title {
-      margin-bottom: 6px;
-      font-size: 14px;
-    }
+    @page { size:A4 landscape; margin:10mm; }
+    body { font-family:sans-serif; }
+    .page { page-break-after:always; }
   </style>
-  </head>
-  <body>
+  </head><body>
   `;
 
   sheets.forEach((s,i)=>{
-    html += `
+    html+=`
       <div class="page">
-        <div class="title">
-          木取り図 ${i+1}枚目　
-          （${W}×${H}mm / 使用率 ${usage(s,W,H)}% / ${today}）
+        <div>
+          木取り図 ${i+1}枚目（${W}×${H}mm / 使用率${usage(s,W,H)}% / ${date}）
         </div>
-
-        <svg
-          width="277mm"
-          height="190mm"
-          viewBox="0 0 ${W} ${H}"
-          preserveAspectRatio="xMidYMid meet">
-
+        <svg width="277mm" height="190mm"
+             viewBox="0 0 ${W} ${H}"
+             preserveAspectRatio="xMidYMid meet">
           <rect width="${W}" height="${H}"
-                fill="none" stroke="black"/>
-
+            fill="none" stroke="black"/>
           ${s.map(r=>`
             <rect x="${r.x}" y="${r.y}"
               width="${r.w}" height="${r.h}"
@@ -194,15 +178,18 @@ function pdf(){
             <text x="${r.x+6}" y="${r.y+16}" font-size="14">
               ${r.name}${r.rot?"(回転)":""}
             </text>
+            <text x="${r.x+6}" y="${r.y+32}" font-size="12">
+              ${r.w}×${r.h}
+            </text>
           `).join("")}
         </svg>
       </div>
     `;
   });
 
-  html += `</body></html>`;
+  html+=`</body></html>`;
 
-  const win = window.open();
+  const win=window.open();
   win.document.write(html);
   win.document.close();
   win.print();
