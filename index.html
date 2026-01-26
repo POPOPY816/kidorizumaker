@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>木取り計算（印刷対応）</title>
+<title>木取り計算（印刷対応・改）</title>
 <style>
 body {
   font-family: "Yu Gothic", "Meiryo", sans-serif;
@@ -19,7 +19,7 @@ button { padding: 6px 12px; margin-top: 8px; }
 }
 
 .info {
-  margin: 10px 0;
+  margin: 6px 0;
   font-size: 14px;
 }
 </style>
@@ -34,25 +34,31 @@ button { padding: 6px 12px; margin-top: 8px; }
   <input id="h" type="number" value="1820"> mm
 </div>
 
-<div>
 <textarea id="csv">
 A,200,300,2
 B,450,300,1
 C,300,200,3
 </textarea>
-</div>
 
+<br>
 <button onclick="calc()">表示</button>
 <button onclick="pdf()">PDF出力</button>
 
 <div id="view"></div>
 
 <script>
-function parseCSV(t){
-  return t.trim().split(/\n/).map(l=>{
-    const [n,w,h,q]=l.split(",");
-    return {name:n, w:+w, h:+h, q:+q};
-  });
+function parseCSV(text){
+  return text.trim().split(/\n/).map((l,i)=>{
+    const p = l.split(",");
+    if(p.length !== 4) return null;
+    const [n,w,h,q] = p;
+    return {
+      name: n.trim(),
+      w: +w,
+      h: +h,
+      q: +q
+    };
+  }).filter(Boolean);
 }
 
 function layout(parts, W, H){
@@ -61,46 +67,67 @@ function layout(parts, W, H){
     for(let i=0;i<p.q;i++) items.push({...p});
   });
 
-  // 大きい順に並べる（重要）
+  // 面積の大きい順
   items.sort((a,b)=> (b.w*b.h)-(a.w*a.h));
 
   let sheets=[[]];
-  let x=0, y=0, row=0;
+  let x=0,y=0,row=0, used=0;
 
   for(const p of items){
-    if(x + p.w > W){
+    let pw = p.w, ph = p.h;
+    let rotated = false;
+
+    // 回転チェック
+    if(pw > W || ph > H){
+      if(ph <= W && pw <= H){
+        [pw, ph] = [ph, pw];
+        rotated = true;
+      }
+    }
+
+    if(x + pw > W){
       x = 0;
       y += row;
       row = 0;
     }
-    if(y + p.h > H){
+
+    if(y + ph > H){
       sheets.push([]);
       x = 0; y = 0; row = 0;
     }
 
-    sheets.at(-1).push({...p, x, y});
-    x += p.w;
-    row = Math.max(row, p.h);
+    sheets.at(-1).push({
+      ...p, w: pw, h: ph, x, y, rotated
+    });
+
+    x += pw;
+    row = Math.max(row, ph);
   }
 
   return sheets;
+}
+
+function usage(sheet, W, H){
+  const used = sheet.reduce((s,r)=>s+r.w*r.h,0);
+  return Math.round(used / (W*H) * 100);
 }
 
 function drawSheets(sheets, W, H){
   return sheets.map((s,i)=>`
     <div class="sheet">
       <div class="info">
-        板 ${i+1} / サイズ ${W} × ${H} mm
+        板 ${i+1}（${W}×${H} mm）｜
+        使用率 ${usage(s,W,H)}%
       </div>
       <svg width="${W}" height="${H}">
         <rect x="0" y="0" width="${W}" height="${H}"
-              fill="none" stroke="#000" stroke-width="2"/>
+          fill="none" stroke="#000" stroke-width="2"/>
         ${s.map(r=>`
           <rect x="${r.x}" y="${r.y}"
-                width="${r.w}" height="${r.h}"
-                fill="#eee" stroke="#000"/>
-          <text x="${r.x+6}" y="${r.y+16}" font-size="14">
-            ${r.name}
+            width="${r.w}" height="${r.h}"
+            fill="#eee" stroke="#000"/>
+          <text x="${r.x+6}" y="${r.y+16}" font-size="13">
+            ${r.name}${r.rotated?"(回転)":""}
           </text>
           <text x="${r.x+6}" y="${r.y+32}" font-size="12">
             ${r.w}×${r.h}
@@ -129,10 +156,10 @@ function pdf(){
   <html><head>
   <style>
     @page { size: A4 landscape; margin: 10mm; }
-    body { margin: 0; font-family: sans-serif; }
+    body { font-family: sans-serif; }
     .page { page-break-after: always; }
-    .title { font-size: 16px; margin-bottom: 6px; }
-    svg { width: 100%; height: auto; }
+    .title { font-size: 15px; margin-bottom: 6px; }
+    svg { width: 100%; }
   </style>
   </head><body>
   `;
@@ -141,17 +168,18 @@ function pdf(){
     html += `
       <div class="page">
         <div class="title">
-          木取り図 ${i+1}枚目（${W}×${H} mm）
+          木取り図 ${i+1}枚目（${W}×${H}mm）
+          ／ 使用率 ${usage(s,W,H)}%
         </div>
         <svg viewBox="0 0 ${W} ${H}">
           <rect x="0" y="0" width="${W}" height="${H}"
-                fill="none" stroke="black" stroke-width="2"/>
+            fill="none" stroke="black" stroke-width="2"/>
           ${s.map(r=>`
             <rect x="${r.x}" y="${r.y}"
-                  width="${r.w}" height="${r.h}"
-                  fill="#eee" stroke="black"/>
+              width="${r.w}" height="${r.h}"
+              fill="#eee" stroke="black"/>
             <text x="${r.x+6}" y="${r.y+16}" font-size="14">
-              ${r.name}
+              ${r.name}${r.rotated?"(回転)":""}
             </text>
             <text x="${r.x+6}" y="${r.y+32}" font-size="12">
               ${r.w}×${r.h}
