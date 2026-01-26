@@ -62,7 +62,7 @@ textarea { width: 100%; height: 180px; }
   </label>
 </div>
 
-<h3>部材CSV（名前,幅,長さ,個数）※区切り文字は自動判定</h3>
+<h3>部材CSV（名前,幅,長さ,個数）</h3>
 <textarea id="csvInput">パーツA,200,300,2
 パーツB,450,300,1
 パーツC,300,200,3</textarea>
@@ -75,211 +75,163 @@ textarea { width: 100%; height: 180px; }
 <div id="resultArea"></div>
 <div id="statsArea"></div>
 
-<!-- --------------------------------------------------------------
-     ここから JavaScript（修正版・完全組込み）
--------------------------------------------------------------- -->
 <script>
-// ----------- 基本ユーティリティ ---------------------------------
-
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({
     "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
   }[c]));
 }
 
-// 全角数字・ドットなどを半角化
 function normalizeNumber(x){
   if(typeof x!=="string") return x;
-  const z = x
-    .replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
-    .replace(/[．]/g,".")
-    .replace(/[，]/g,"")
-    .trim();
-  return z;
+  return x.replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+          .replace(/[．]/g,".")
+          .replace(/[，]/g,"")
+          .trim();
 }
 
-// 区切り文字検出（誤判定改善）
-function detectDelimiter(sampleLines){
+function detectDelimiter(lines){
   const cands=[',','\t',';','、','，'];
   let best=',',score=-1;
   for(const c of cands){
-    const s = sampleLines.reduce((a,l)=> a + (l.split(c).length - 1), 0);
-    if(s>score){ best=c; score=s; }
+    const s=lines.reduce((a,l)=>a+(l.split(c).length-1),0);
+    if(s>score){best=c;score=s;}
   }
-  const testCols = sampleLines[0].split(best).length;
-  if(testCols < 2) return ',';
   return best;
 }
 
-// 配列シャッフル（返り値つき）
 function shuffle(arr, seed=1){
-  let x = seed>>>0 || 1;
+  let x = seed>>>0;
   for(let i=arr.length-1;i>0;i--){
     x = (1664525*x + 1013904223) >>> 0;
     const j = x % (i+1);
-    [arr[i],arr[j]] = [arr[j],arr[i]];
+    [arr[i],arr[j]]=[arr[j],arr[i]];
   }
   return arr;
 }
 
-// -----------------------------------------------------------------
-// CSV 読み込み
-// -----------------------------------------------------------------
 function parseCSV(txt){
-  const lines = txt.split(/\r?\n/).filter(s=>s.trim()!=="");
-  if(lines.length===0) return [];
-
-  const dlm = detectDelimiter(lines.slice(0,3));
-  const out = [];
-
-  for(const line of lines){
-    const cols = line.split(dlm).map(c=>c.trim());
-    if(cols.length<4) continue;
-    const name = cols[0];
-    const w = Number(normalizeNumber(cols[1]));
-    const h = Number(normalizeNumber(cols[2]));
-    const qty = Number(normalizeNumber(cols[3]));
-    if(!isFinite(w)||!isFinite(h)||!isFinite(qty)) continue;
-    out.push({name,w,h,qty});
-  }
-  return out;
+  const lines = txt.split(/\r?\n/).filter(l=>l.trim());
+  const dlm = detectDelimiter(lines);
+  return lines.map(l=>{
+    const c=l.split(dlm);
+    return {
+      name:c[0],
+      w:Number(normalizeNumber(c[1])),
+      h:Number(normalizeNumber(c[2])),
+      qty:Number(normalizeNumber(c[3]))
+    };
+  });
 }
 
-// -----------------------------------------------------------------
-// 配置アルゴリズム（簡易棚積み）
-// -----------------------------------------------------------------
 function planLayout(parts, sheetW, sheetH, kerf, shuffleMode){
-  let items =[];
-  for(const p of parts){
-    for(let i=0;i<p.qty;i++){
-      items.push({name:p.name,w:p.w,h:p.h});
-    }
-  }
+  let items=[];
+  parts.forEach(p=>{
+    for(let i=0;i<p.qty;i++) items.push({...p});
+  });
 
-  // 面積大 → 幅大の順でソート
-  items.sort((a,b)=> (b.w*b.h - a.w*a.h) || (Math.max(b.w,b.h) - Math.max(a.w,a.h)));
+  items.sort((a,b)=>b.w*b.h-a.w*a.h);
 
   if(shuffleMode!=="none"){
-    const seed = shuffleMode==="seed1"?1:shuffleMode==="seed2"?2:3;
-    items = shuffle(items, seed);
+    const seed={seed1:1,seed2:2,seed3:3}[shuffleMode];
+    shuffle(items,seed);
   }
 
-  let sheets=[];
-  let currentSheet = {rects:[], w:sheetW, h:sheetH};
-  sheets.push(currentSheet);
+  const sheets=[];
+  let sheet={rects:[]};
+  sheets.push(sheet);
 
-  let x=0, y=0, rowMaxH=0;
-  function newRow(){
-    x=0;
-    y += rowMaxH + kerf;
-    rowMaxH=0;
-  }
+  let x=0,y=0,rowH=0;
 
   for(const it of items){
-    if(x>0 && x+it.w+kerf > sheetW){
-      newRow();
+    if(x+it.w>sheetW){
+      x=0;
+      y+=rowH+kerf;
+      rowH=0;
     }
-    if(y + it.h > sheetH){
-      currentSheet = {rects:[], w:sheetW, h:sheetH};
-      sheets.push(currentSheet);
-      x=0; y=0; rowMaxH=0;
+    if(y+it.h>sheetH){
+      sheet={rects:[]};
+      sheets.push(sheet);
+      x=0;y=0;rowH=0;
     }
-    currentSheet.rects.push({
-      name: it.name,
-      x, y, w:it.w, h:it.h
-    });
-    x += it.w + kerf;
-    if(it.h > rowMaxH) rowMaxH=it.h;
+    sheet.rects.push({x,y,w:it.w,h:it.h,name:it.name});
+    x+=it.w+kerf;
+    rowH=Math.max(rowH,it.h);
   }
-
-  return {sheets, workW:sheetW, workH:sheetH};
+  return {sheets,workW:sheetW,workH:sheetH};
 }
 
-// -----------------------------------------------------------------
-// 統計計算（修正版：実配置面積を使用）
-// -----------------------------------------------------------------
 function calcStats(result, parts){
-  const {sheets, workW, workH} = result;
-  const totalSheetArea = sheets.length * (workW * workH);
-
-  const placedArea = sheets.reduce(
-    (acc, sh) => acc + sh.rects.reduce((a,r)=>a + r.w*r.h,0), 0
-  );
-
-  const partsArea = parts.reduce((a,p)=> a + p.w*p.h*p.qty, 0);
-
-  const waste = Math.max(0, totalSheetArea - placedArea);
-  const util = totalSheetArea>0 ? (placedArea / totalSheetArea * 100) : 0;
-
-  return { sheetsCount: sheets.length, partsArea, placedArea, waste, util };
+  const total = result.sheets.length * result.workW * result.workH;
+  const placed = result.sheets.reduce((a,s)=>a+s.rects.reduce((b,r)=>b+r.w*r.h,0),0);
+  return {
+    sheetsCount: result.sheets.length,
+    partsArea: parts.reduce((a,p)=>a+p.w*p.h*p.qty,0),
+    placedArea: placed,
+    waste: total-placed,
+    util: placed/total*100
+  };
 }
 
-// -----------------------------------------------------------------
-// 描画
-// -----------------------------------------------------------------
-function renderSheets(result){
-  const {sheets, workW, workH} = result;
-  let html="";
-  sheets.forEach((sh, idx)=>{
-    html+=`<div class="sheetBox">
-      <div style="padding:4px;font-weight:bold;">シート #${idx+1}</div>
-      <svg width="${workW}" height="${workH}" style="border:1px solid #000;background:#eee;">`;
-    sh.rects.forEach(r=>{
-      html+=`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
-         fill="#cce" stroke="#33f" stroke-width="2" />
-         <text class="rectLabel" x="${r.x+4}" y="${r.y+14}">
-           ${escapeHtml(r.name)} (${r.w}×${r.h})
-         </text>`;
-    });
-    html+=`</svg></div>`;
-  });
-  return html;
+function renderSheets(res){
+  return res.sheets.map((s,i)=>`
+    <div class="sheetBox">
+      <div>シート #${i+1}</div>
+      <svg width="${res.workW}" height="${res.workH}">
+        ${s.rects.map(r=>`
+          <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
+            fill="#cce" stroke="#33f" stroke-width="2"/>
+          <text x="${r.x+4}" y="${r.y+14}" class="rectLabel">
+            ${r.name} (${r.w}×${r.h})
+          </text>`).join("")}
+      </svg>
+    </div>`).join("");
 }
 
-// -----------------------------------------------------------------
-// 統計表示
-// -----------------------------------------------------------------
-function renderStats(stats){
-  return `<div class="statsBox">
-    <h3>統計</h3>
-    <div>使用シート数：${stats.sheetsCount}</div>
-    <div>要求部材総面積：${stats.partsArea} mm²</div>
-    <div>配置された面積：${stats.placedArea} mm²</div>
-    <div>廃材面積：${stats.waste} mm²</div>
-    <div>利用率：${stats.util.toFixed(2)}%</div>
+function renderStats(s){
+  return `
+  <div class="statsBox">
+    <div>使用シート数: ${s.sheetsCount}</div>
+    <div>部材面積: ${s.partsArea}</div>
+    <div>使用面積: ${s.placedArea}</div>
+    <div>廃材面積: ${s.waste}</div>
+    <div>利用率: ${s.util.toFixed(2)}%</div>
   </div>`;
 }
 
-// -----------------------------------------------------------------
-// PDF 出力（フォントサイズ自動調整）
-// -----------------------------------------------------------------
+/* ===== ここが修正版 PDF 出力 ===== */
 function printPDF(result){
   const w = result.workW;
   const h = result.workH;
-  const pages = result.sheets.length;
 
   let html = `
   <html><head>
   <style>
-  @page { size: A4 landscape; margin: 10mm; }
-  body{ font-family: sans-serif; }
-  svg{ border:1px solid #000; background:#eee; }
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: sans-serif; }
+    svg {
+      width: 100%;
+      height: auto;
+      max-height: 180mm;
+      border: 1px solid #000;
+      background: #eee;
+    }
   </style>
   </head><body>
   `;
 
-  result.sheets.forEach((sh, i)=>{
-    html+=`<h2>シート #${i+1}</h2>`;
-    html+=`<svg width="${w}" height="${h}">`;
+  result.sheets.forEach((sh,i)=>{
+    html += `<h3>シート #${i+1}</h3>
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">`;
     sh.rects.forEach(r=>{
-      html+=`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
-         fill="#cce" stroke="#33f" stroke-width="2" />`;
-      const fs = Math.max(10, Math.min(40, r.w/5));
-      html+=`<text x="${r.x+4}" y="${r.y+fs}" font-size="${fs}">
-        ${escapeHtml(r.name)} (${r.w}×${r.h})
+      html+=`
+      <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
+        fill="#cce" stroke="#33f" stroke-width="2"/>
+      <text x="${r.x+4}" y="${r.y+14}" font-size="14">
+        ${r.name}
       </text>`;
     });
-    html+=`</svg><div style="page-break-after:always;"></div>`;
+    html+=`</svg><div style="page-break-after:always"></div>`;
   });
 
   html += `</body></html>`;
@@ -287,38 +239,21 @@ function printPDF(result){
   const win = window.open("");
   win.document.write(html);
   win.document.close();
-  win.focus();
   win.print();
 }
 
-// -----------------------------------------------------------------
-// イベント
-// -----------------------------------------------------------------
-document.getElementById("calcBtn").addEventListener("click", ()=>{
-  const parts = parseCSV(document.getElementById("csvInput").value);
-  const sheetW = Number(document.getElementById("sheetW").value);
-  const sheetH = Number(document.getElementById("sheetH").value);
-  const kerf   = Number(document.getElementById("kerf").value);
-  const shuf   = document.getElementById("shuffleMode").value;
+document.getElementById("calcBtn").onclick=()=>{
+  const p=parseCSV(csvInput.value);
+  const r=planLayout(p,+sheetW.value,+sheetH.value,+kerf.value,shuffleMode.value);
+  resultArea.innerHTML=renderSheets(r);
+  statsArea.innerHTML=renderStats(calcStats(r,p));
+};
 
-  const result = planLayout(parts, sheetW, sheetH, kerf, shuf);
-  const stats  = calcStats(result, parts);
-
-  document.getElementById("resultArea").innerHTML = renderSheets(result);
-  document.getElementById("statsArea").innerHTML  = renderStats(stats);
-});
-
-document.getElementById("pdfBtn").addEventListener("click", ()=>{
-  const parts = parseCSV(document.getElementById("csvInput").value);
-  const sheetW = Number(document.getElementById("sheetW").value);
-  const sheetH = Number(document.getElementById("sheetH").value);
-  const kerf   = Number(document.getElementById("kerf").value);
-  const shuf   = document.getElementById("shuffleMode").value;
-
-  const result = planLayout(parts, sheetW, sheetH, kerf, shuf);
-  printPDF(result);
-});
+document.getElementById("pdfBtn").onclick=()=>{
+  const p=parseCSV(csvInput.value);
+  const r=planLayout(p,+sheetW.value,+sheetH.value,+kerf.value,shuffleMode.value);
+  printPDF(r);
+};
 </script>
-
 </body>
 </html>
