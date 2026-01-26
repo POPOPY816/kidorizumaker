@@ -205,33 +205,56 @@ function printPDF(result){
   const h = result.workH;
 
   let html = `
-  <html><head>
-  <style>
-    @page { size: A4 landscape; margin: 10mm; }
-    body { font-family: sans-serif; }
-    svg {
-      width: 100%;
-      height: auto;
-      max-height: 180mm;
-      border: 1px solid #000;
-      background: #eee;
-    }
-  </style>
-  </head><body>
+  <html>
+  <head>
+    <style>
+      @page { size: A4 landscape; margin: 0; }
+      body {
+        margin: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .page {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .wrap {
+        transform:
+          rotate(90deg)
+          scale(${Math.min(297 / h, 210 / w)});
+        transform-origin: center center;
+      }
+
+      svg {
+        display: block;
+        width: ${w}px;
+        height: ${h}px;
+        background: #eee;
+        border: 1px solid #000;
+      }
+    </style>
+  </head>
+  <body>
   `;
 
-  result.sheets.forEach((sh,i)=>{
-    html += `<h3>シート #${i+1}</h3>
-    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">`;
-    sh.rects.forEach(r=>{
-      html+=`
-      <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
-        fill="#cce" stroke="#33f" stroke-width="2"/>
-      <text x="${r.x+4}" y="${r.y+14}" font-size="14">
-        ${r.name}
-      </text>`;
-    });
-    html+=`</svg><div style="page-break-after:always"></div>`;
+  result.sheets.forEach(sheet=>{
+    html += `<div class="page"><div class="wrap">
+      <svg viewBox="0 0 ${w} ${h}">
+        ${sheet.rects.map(r=>`
+          <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
+            fill="#cce" stroke="#33f" stroke-width="2"/>
+          <text x="${r.x+4}" y="${r.y+14}" font-size="14">
+            ${r.name}
+          </text>
+        `).join("")}
+      </svg>
+    </div></div>`;
   });
 
   html += `</body></html>`;
@@ -257,3 +280,4 @@ document.getElementById("pdfBtn").onclick=()=>{
 </script>
 </body>
 </html>
+
