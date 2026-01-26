@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>木材最適カット計算 — 単一HTML版</title>
+<title>木材最適カット計算 — 単一HTML版（修正版）</title>
 <style>
 body {
   font-family: sans-serif;
@@ -16,10 +16,21 @@ input, select, button {
   margin: 4px;
 }
 textarea { width: 100%; height: 180px; }
+#resultArea { margin-top: 20px; }
 .sheetBox {
   border: 2px solid #333;
   background: #fff;
   margin: 20px 0;
+  display: inline-block;
+  position: relative;
+}
+.sheetBox svg {
+  display: block;
+}
+.rectLabel {
+  font-size: 12px;
+  fill: #000;
+  pointer-events: none;
 }
 .statsBox {
   background: #fff;
@@ -32,81 +43,163 @@ textarea { width: 100%; height: 180px; }
 </head>
 <body>
 
-<h1>木材最適カット計算</h1>
+<h1>木材最適カット計算 — 単一HTML版（修正版）</h1>
 
 <div>
-  <label>シート幅(mm): <input id="sheetW" value="910"></label>
-  <label>シート長(mm): <input id="sheetH" value="1820"></label>
+  <label>標準シート幅(mm): <input id="sheetW" type="number" value="910"></label>
+  <label>標準シート長(mm): <input id="sheetH" type="number" value="1820"></label>
 </div>
 
 <div>
-  <label>ケルフ(mm): <input id="kerf" value="3"></label>
-  <label>シャッフル:
+  <label>ケルフ（ノコ刃厚, mm）: <input id="kerf" type="number" value="3"></label>
+  <label>ランダム配置: 
     <select id="shuffleMode">
-      <option value="none">なし</option>
-      <option value="seed1">1</option>
-      <option value="seed2">2</option>
-      <option value="seed3">3</option>
+      <option value="none">しない</option>
+      <option value="seed1">シード1</option>
+      <option value="seed2">シード2</option>
+      <option value="seed3">シード3</option>
     </select>
   </label>
 </div>
 
+<h3>部材CSV（名前,幅,長さ,個数）</h3>
 <textarea id="csvInput">パーツA,200,300,2
 パーツB,450,300,1
 パーツC,300,200,3</textarea>
 
-<br>
-<button id="calcBtn">計算</button>
-<button id="pdfBtn">PDF出力</button>
+<div>
+  <button id="calcBtn">計算する</button>
+  <button id="pdfBtn">PDF出力</button>
+</div>
 
 <div id="resultArea"></div>
 <div id="statsArea"></div>
 
 <script>
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function normalizeNumber(x){
+  if(typeof x!=="string") return x;
+  return x.replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+          .replace(/[．]/g,".")
+          .replace(/[，]/g,"")
+          .trim();
+}
+
+function detectDelimiter(lines){
+  const cands=[',','\t',';','、','，'];
+  let best=',',score=-1;
+  for(const c of cands){
+    const s=lines.reduce((a,l)=>a+(l.split(c).length-1),0);
+    if(s>score){best=c;score=s;}
+  }
+  return best;
+}
+
+function shuffle(arr, seed=1){
+  let x = seed>>>0;
+  for(let i=arr.length-1;i>0;i--){
+    x = (1664525*x + 1013904223) >>> 0;
+    const j = x % (i+1);
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
 function parseCSV(txt){
-  return txt.trim().split(/\n/).map(l=>{
-    const c=l.split(",");
-    return {name:c[0],w:+c[1],h:+c[2],qty:+c[3]};
+  const lines = txt.split(/\r?\n/).filter(l=>l.trim());
+  const dlm = detectDelimiter(lines);
+  return lines.map(l=>{
+    const c=l.split(dlm);
+    return {
+      name:c[0],
+      w:Number(normalizeNumber(c[1])),
+      h:Number(normalizeNumber(c[2])),
+      qty:Number(normalizeNumber(c[3]))
+    };
   });
 }
 
-function planLayout(parts, W, H, kerf){
+function planLayout(parts, sheetW, sheetH, kerf, shuffleMode){
   let items=[];
-  parts.forEach(p=>{for(let i=0;i<p.qty;i++)items.push({...p});});
-  let sheets=[{rects:[]}];
+  parts.forEach(p=>{
+    for(let i=0;i<p.qty;i++) items.push({...p});
+  });
+
+  items.sort((a,b)=>b.w*b.h-a.w*a.h);
+
+  if(shuffleMode!=="none"){
+    const seed={seed1:1,seed2:2,seed3:3}[shuffleMode];
+    shuffle(items,seed);
+  }
+
+  const sheets=[];
+  let sheet={rects:[]};
+  sheets.push(sheet);
+
   let x=0,y=0,rowH=0;
 
   for(const it of items){
-    if(x+it.w>W){
-      x=0; y+=rowH+kerf; rowH=0;
+    if(x+it.w>sheetW){
+      x=0;
+      y+=rowH+kerf;
+      rowH=0;
     }
-    if(y+it.h>H){
-      sheets.push({rects:[]});
+    if(y+it.h>sheetH){
+      sheet={rects:[]};
+      sheets.push(sheet);
       x=0;y=0;rowH=0;
     }
-    sheets.at(-1).rects.push({x,y,w:it.w,h:it.h,name:it.name});
+    sheet.rects.push({x,y,w:it.w,h:it.h,name:it.name});
     x+=it.w+kerf;
     rowH=Math.max(rowH,it.h);
   }
-  return {sheets,workW:W,workH:H};
+  return {sheets,workW:sheetW,workH:sheetH};
 }
 
-function renderSheets(r){
-  return r.sheets.map((s,i)=>`
+function calcStats(result, parts){
+  const total = result.sheets.length * result.workW * result.workH;
+  const placed = result.sheets.reduce((a,s)=>a+s.rects.reduce((b,r)=>b+r.w*r.h,0),0);
+  return {
+    sheetsCount: result.sheets.length,
+    partsArea: parts.reduce((a,p)=>a+p.w*p.h*p.qty,0),
+    placedArea: placed,
+    waste: total-placed,
+    util: placed/total*100
+  };
+}
+
+function renderSheets(res){
+  return res.sheets.map((s,i)=>`
     <div class="sheetBox">
-      <h3>シート #${i+1}</h3>
-      <svg width="${r.workW}" height="${r.workH}">
-        ${s.rects.map(o=>`
-          <rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}"
+      <div>シート #${i+1}</div>
+      <svg width="${res.workW}" height="${res.workH}">
+        ${s.rects.map(r=>`
+          <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
             fill="#cce" stroke="#33f" stroke-width="2"/>
-          <text x="${o.x+4}" y="${o.y+14}" font-size="12">
-            ${o.name}
+          <text x="${r.x+4}" y="${r.y+14}" class="rectLabel">
+            ${r.name} (${r.w}×${r.h})
           </text>`).join("")}
       </svg>
     </div>`).join("");
 }
 
-/* ===== ここだけが修正点 ===== */
+function renderStats(s){
+  return `
+  <div class="statsBox">
+    <div>使用シート数: ${s.sheetsCount}</div>
+    <div>部材面積: ${s.partsArea}</div>
+    <div>使用面積: ${s.placedArea}</div>
+    <div>廃材面積: ${s.waste}</div>
+    <div>利用率: ${s.util.toFixed(2)}%</div>
+  </div>`;
+}
+
+/* ===== ここが修正版 PDF 出力 ===== */
 function printPDF(result){
   const w = result.workW;
   const h = result.workH;
@@ -115,36 +208,30 @@ function printPDF(result){
   <html><head>
   <style>
     @page { size: A4 landscape; margin: 10mm; }
-    body { margin:0; font-family:sans-serif; }
-    .page {
-      width: 100%;
-      height: 100%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-    }
+    body { font-family: sans-serif; }
     svg {
-      transform: rotate(90deg);
-      transform-origin: center center;
-      max-width: 100%;
-      max-height: 100%;
-      border:1px solid #000;
-      background:#eee;
+      width: 100%;
+      height: auto;
+      max-height: 180mm;
+      border: 1px solid #000;
+      background: #eee;
     }
   </style>
   </head><body>
   `;
 
-  result.sheets.forEach(s=>{
-    html+=`<div class="page">
-      <svg viewBox="0 0 ${w} ${h}">
-        ${s.rects.map(r=>`
-          <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
-            fill="#cce" stroke="#33f" stroke-width="2"/>
-          <text x="${r.x+4}" y="${r.y+14}" font-size="14">${r.name}</text>
-        `).join("")}
-      </svg>
-    </div>`;
+  result.sheets.forEach((sh,i)=>{
+    html += `<h3>シート #${i+1}</h3>
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">`;
+    sh.rects.forEach(r=>{
+      html+=`
+      <rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"
+        fill="#cce" stroke="#33f" stroke-width="2"/>
+      <text x="${r.x+4}" y="${r.y+14}" font-size="14">
+        ${r.name}
+      </text>`;
+    });
+    html+=`</svg><div style="page-break-after:always"></div>`;
   });
 
   html += `</body></html>`;
@@ -154,25 +241,17 @@ function printPDF(result){
   win.document.close();
   win.print();
 }
-/* ===== ここまで ===== */
 
 document.getElementById("calcBtn").onclick=()=>{
-  const r=planLayout(
-    parseCSV(csvInput.value),
-    +sheetW.value,
-    +sheetH.value,
-    +kerf.value
-  );
+  const p=parseCSV(csvInput.value);
+  const r=planLayout(p,+sheetW.value,+sheetH.value,+kerf.value,shuffleMode.value);
   resultArea.innerHTML=renderSheets(r);
+  statsArea.innerHTML=renderStats(calcStats(r,p));
 };
 
 document.getElementById("pdfBtn").onclick=()=>{
-  const r=planLayout(
-    parseCSV(csvInput.value),
-    +sheetW.value,
-    +sheetH.value,
-    +kerf.value
-  );
+  const p=parseCSV(csvInput.value);
+  const r=planLayout(p,+sheetW.value,+sheetH.value,+kerf.value,shuffleMode.value);
   printPDF(r);
 };
 </script>
