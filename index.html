@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>木取り計算（印刷対応・完成形）</title>
+<title>木取り計算（実用版）</title>
 <style>
 body {
   font-family: "Yu Gothic", "Meiryo", sans-serif;
@@ -22,6 +22,7 @@ button { padding: 6px 12px; margin-top: 8px; }
   margin: 6px 0;
   font-size: 14px;
 }
+svg { max-width: 100%; height: auto; }
 </style>
 </head>
 <body>
@@ -48,16 +49,22 @@ C,300,200,3
 
 <script>
 function parseCSV(text){
-  return text.trim().split(/\n/).map(l=>{
+  const rows = text.trim().split(/\n/);
+  const out = [];
+
+  for(const l of rows){
     const p = l.split(",");
-    if(p.length !== 4) return null;
-    return {
+    if(p.length !== 4) continue;
+
+    const w = +p[1], h = +p[2], q = +p[3];
+    if(!w || !h || !q) continue;
+
+    out.push({
       name: p[0].trim(),
-      w: +p[1],
-      h: +p[2],
-      q: +p[3]
-    };
-  }).filter(Boolean);
+      w, h, q
+    });
+  }
+  return out;
 }
 
 function layout(parts, W, H){
@@ -97,19 +104,17 @@ function layout(parts, W, H){
 }
 
 function usage(sheet,W,H){
-  return Math.round(
-    sheet.reduce((s,r)=>s+r.w*r.h,0)/(W*H)*100
-  );
+  return Math.round(sheet.reduce((s,r)=>s+r.w*r.h,0)/(W*H)*100);
 }
 
 function drawSheets(sheets,W,H){
   return sheets.map((s,i)=>`
     <div class="sheet">
       <div class="info">
-        板${i+1}（${W}×${H}mm） 使用率 ${usage(s,W,H)}%
+        板${i+1}（${W}×${H}mm）｜使用率 ${usage(s,W,H)}%
       </div>
-      <svg width="${W}" height="${H}">
-        <rect width="${W}" height="${H}" fill="none" stroke="black" stroke-width="2"/>
+      <svg viewBox="0 0 ${W} ${H}">
+        <rect width="${W}" height="${H}" fill="none" stroke="black"/>
         ${s.map(r=>`
           <rect x="${r.x}" y="${r.y}"
             width="${r.w}" height="${r.h}"
@@ -137,6 +142,7 @@ function pdf(){
   const W=+w.value, H=+h.value;
   const parts=parseCSV(csv.value);
   const sheets=layout(parts,W,H);
+  const today = new Date().toLocaleDateString();
 
   let html=`
   <html><head>
@@ -152,7 +158,10 @@ function pdf(){
   sheets.forEach((s,i)=>{
     html+=`
       <div class="page">
-        <div>木取り図 ${i+1}枚目（${W}×${H}mm / 使用率${usage(s,W,H)}%）</div>
+        <div>
+          木取り図 ${i+1}枚目 / ${today}<br>
+          板サイズ ${W}×${H}mm ／ 使用率 ${usage(s,W,H)}%
+        </div>
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
           <rect width="${W}" height="${H}" fill="none" stroke="black"/>
           ${s.map(r=>`
