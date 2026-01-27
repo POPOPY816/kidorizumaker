@@ -153,9 +153,7 @@ function drawSheets(sheets,W,H){
        <text x="${r.x+6}" y="${r.y+20}" font-size="13">
   ${r.name}${r.rot ? "（回転）" : ""}　${r.w}×${r.h}
 </text>
-        <text x="${r.x+6}" y="${r.y+32}" font-size="12">
-          ${r.w}×${r.h}
-        </text>
+       
       `).join("")}
     </svg>
   </div>`).join("");
@@ -228,6 +226,7 @@ function pdf(){
 </script>
 </body>
 </html>
+
 
 
 
