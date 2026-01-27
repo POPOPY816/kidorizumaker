@@ -191,14 +191,20 @@ function pdf(){
       <div>木取り図 ${i+1}（${W}×${H} / 使用率${usage(s,W,H)}% / ${date}）</div>
       <svg width="277mm" height="190mm" viewBox="0 0 ${W} ${H}">
         <rect width="${W}" height="${H}" fill="none" stroke="black"/>
-        ${s.map(r=>`
-          <rect x="${r.x}" y="${r.y}"
-            width="${r.w}" height="${r.h}"
-            fill="#eee" stroke="black"/>
-          <text x="${r.x+6}" y="${r.y+16}" font-size="14">
-            ${r.name}
-          </text>
-        `).join("")}
+       ${s.map(r=>`
+  <rect x="${r.x}" y="${r.y}"
+    width="${r.w}" height="${r.h}"
+    fill="#eee" stroke="black"/>
+
+  <text x="${r.x+6}" y="${r.y+16}" font-size="14">
+    ${r.name}${r.rot ? "（回転）" : ""}
+  </text>
+
+  <text x="${r.x+6}" y="${r.y+32}" font-size="12">
+    ${r.w} × ${r.h}
+  </text>
+`).join("")}
+
       </svg>
     </div>`;
   });
@@ -212,3 +218,4 @@ function pdf(){
 </script>
 </body>
 </html>
+
