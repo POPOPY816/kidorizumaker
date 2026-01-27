@@ -150,9 +150,9 @@ function drawSheets(sheets,W,H){
         <rect x="${r.x}" y="${r.y}"
           width="${r.w}" height="${r.h}"
           fill="#eee" stroke="black"/>
-        <text x="${r.x+6}" y="${r.y+16}" font-size="13">
-          ${r.name}${r.rot?"(回転)":""}
-        </text>
+       <text x="${r.x+6}" y="${r.y+20}" font-size="13">
+  ${r.name}${r.rot ? "（回転）" : ""}　${r.w}×${r.h}
+</text>
         <text x="${r.x+6}" y="${r.y+32}" font-size="12">
           ${r.w}×${r.h}
         </text>
@@ -227,5 +227,6 @@ function pdf(){
 </script>
 </body>
 </html>
+
 
 
