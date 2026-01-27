@@ -182,36 +182,36 @@ function pdf(){
   <head>
     <style>
       @page { size: A4 landscape; margin: 10mm; }
-      body { font-family: sans-serif; }
+      body { font-family: "Yu Gothic", "Meiryo", sans-serif; }
       .page { page-break-after: always; }
     </style>
   </head>
   <body>
   `;
 
-  sheets.forEach((s,i)=>{
+  sheets.forEach((s, i) => {
     html += `
     <div class="page">
       <div>
-        木取り図 ${i+1}（${W}×${H} / 使用率${usage(s,W,H)}% / ${date}）
+        木取り図 ${i + 1}（${W}×${H} / 使用率 ${usage(s, W, H)}% / ${date}）
       </div>
+
       <svg width="277mm" height="190mm" viewBox="0 0 ${W} ${H}">
         <rect width="${W}" height="${H}" fill="none" stroke="black"/>
-        ${s.map(r=>`
+
+        ${s.map(r => `
           <rect x="${r.x}" y="${r.y}"
-            width="${r.w}" height="${r.h}"
-            fill="#eee" stroke="black"/>
+                width="${r.w}" height="${r.h}"
+                fill="#eee" stroke="black"/>
 
-          <text x="${r.x+6}" y="${r.y+16}" font-size="14">
-            ${r.name}${r.rot ? "（回転）" : ""}
-          </text>
-
-          <text x="${r.x+6}" y="${r.y+32}" font-size="12">
-            ${r.w} × ${r.h}
+          <text x="${r.x + 6}" y="${r.y + 20}" font-size="13">
+            ${r.name}${r.rot ? "（回転）" : ""} ${r.w}×${r.h}
           </text>
         `).join("")}
+
       </svg>
-    </div>`;
+    </div>
+    `;
   });
 
   html += `
@@ -224,9 +224,11 @@ function pdf(){
   win.document.close();
   win.print();
 }
+
 </script>
 </body>
 </html>
+
 
 
 
